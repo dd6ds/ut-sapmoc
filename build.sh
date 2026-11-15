@@ -207,7 +207,7 @@ print(a[0]["archive_download_url"], a[0]["name"]) if a else print("")')
     curl -fL --progress-bar -H "Authorization: Bearer $token" -o "$zip" "$url"
     python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$zip" "$OUT_DIR"
     rm -f "$zip"
-    CLICK="$(ls -t "$OUT_DIR"/*.click | head -n 1)"
+    CLICK="$(ls -t "$OUT_DIR"/ut-sapmoc_*.click | head -n 1)"
     echo "build.sh: $CLICK"
 }
 
@@ -251,14 +251,20 @@ release() {
     echo "build.sh: for the OpenStore upload: $CLICK"
 }
 
-# Click of the newest finished GitHub run (e.g. after pushing a tag yourself);
-# for a tag build also creates the release if the workflow could not.
+# Click of the newest GitHub run (e.g. after pushing a tag yourself). Waits if
+# it is still running; for a tag build also creates the release if needed.
 fetch() {
-    local tag
-    read -r RUN_ID tag < <(api "https://api.github.com/repos/$REPO/actions/runs?status=completed&per_page=1" \
+    local id status tag
+    read -r id status tag < <(api "https://api.github.com/repos/$REPO/actions/runs?per_page=1" \
         | python3 -c 'import json,sys
-r = json.load(sys.stdin)["workflow_runs"][0]
-print(r["id"], r["head_branch"])')
+runs = json.load(sys.stdin)["workflow_runs"]
+print(runs[0]["id"], runs[0]["status"], runs[0]["head_branch"]) if runs else print("- - -")')
+    [[ "$id" != "-" ]] || die "no GitHub build yet - start one with './build.sh ci' or './build.sh release <version>'"
+    if [[ "$status" != "completed" ]]; then
+        echo "build.sh: run $id ($tag) is still $status - waiting"
+        wait_for_run "$(( id - 1 ))"
+    fi
+    RUN_ID="$id"
     echo "build.sh: run $RUN_ID ($tag)"
     download_artifact
     [[ "$tag" == v* ]] && ensure_release "$tag"
@@ -270,7 +276,7 @@ print(r["id"], r["head_branch"])')
 phone() {
     command -v adb >/dev/null || die "adb is not installed (sudo apt install adb)."
     local click="${1:-}"
-    [[ -n "$click" ]] || click="$(ls -t "$OUT_DIR"/*.click 2>/dev/null | head -n 1 || true)"
+    [[ -n "$click" ]] || click="$(ls -t "$OUT_DIR"/ut-sapmoc_*.click 2>/dev/null | head -n 1 || true)"
     [[ -f "$click" ]] || die "no click found - run './build.sh ci' or './build.sh download' first"
     adb get-state >/dev/null 2>&1 || die "no phone connected (adb devices)"
 
