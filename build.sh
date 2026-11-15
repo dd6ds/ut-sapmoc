@@ -7,6 +7,8 @@
 #   ./build.sh ci                 start the GitHub build, wait, download the click to build/
 #   ./build.sh release 0.1.0      tag v0.1.0: GitHub builds a release with exactly this
 #                                 version (for the OpenStore), the click lands in build/
+#   ./build.sh fetch              download the click of the newest finished GitHub run
+#                                 (creates the release for a tag build if needed)
 #   ./build.sh download           download the click of the latest GitHub release to build/
 #   ./build.sh phone [file.click] install the newest click in build/ (or the given one) on
 #                                 the phone over adb (USB) and start it
@@ -249,6 +251,20 @@ release() {
     echo "build.sh: for the OpenStore upload: $CLICK"
 }
 
+# Click of the newest finished GitHub run (e.g. after pushing a tag yourself);
+# for a tag build also creates the release if the workflow could not.
+fetch() {
+    local tag
+    read -r RUN_ID tag < <(api "https://api.github.com/repos/$REPO/actions/runs?status=completed&per_page=1" \
+        | python3 -c 'import json,sys
+r = json.load(sys.stdin)["workflow_runs"][0]
+print(r["id"], r["head_branch"])')
+    echo "build.sh: run $RUN_ID ($tag)"
+    download_artifact
+    [[ "$tag" == v* ]] && ensure_release "$tag"
+    true
+}
+
 # --- Phone ------------------------------------------------------------------------
 
 phone() {
@@ -303,10 +319,11 @@ main() {
         "") local_build ;;
         ci) ci ;;
         release) shift; release "${1:-}" ;;
+        fetch) fetch ;;
         download) download ;;
         phone) shift; phone "${1:-}" ;;
         local-phone) local_build; phone ;;
-        -h|--help|help) sed -n '2,17p' "$0" ;;
+        -h|--help|help) sed -n '2,19p' "$0" ;;
         *) check_docker; build_runner_image; run_clickable "$@" ;;
     esac
 }

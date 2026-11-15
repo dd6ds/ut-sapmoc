@@ -149,6 +149,7 @@ ut-sapmoc/
 |---|---|
 | `./build.sh ci` | startet den GitHub-Build, wartet und lädt das Click nach `build/` (Version `0.1.0.<Lauf>`) |
 | `./build.sh release <version>` | setzt das Tag `v<version>`, GitHub baut und veröffentlicht ein Release mit genau dieser Version, das Click landet in `build/` |
+| `./build.sh fetch` | lädt das Click des neuesten fertigen GitHub-Laufs nach `build/` (legt bei einem Tag-Build das Release an, falls GitHub es nicht konnte) |
 | `./build.sh download` | lädt das Click des neuesten GitHub-Releases nach `build/` |
 | `./build.sh phone [datei.click]` | installiert das neueste Click aus `build/` (oder das angegebene) per adb und startet die App |
 | `./build.sh` | lokaler Build mit clickable (baut die Docker-Images bei Bedarf, holt die Quellen) |
