@@ -386,7 +386,7 @@ index 0248426..e9ee2ec 100644
  
  #ifdef DEBUG
 diff --git a/qt/mainwindow.cpp b/qt/mainwindow.cpp
-index 9aaf07c..2beb3d8 100644
+index 9aaf07c..4781e5e 100644
 --- a/qt/mainwindow.cpp
 +++ b/qt/mainwindow.cpp
 @@ -11,6 +11,10 @@
@@ -482,7 +482,16 @@ index 9aaf07c..2beb3d8 100644
      break;
    }
  
-@@ -915,6 +944,8 @@ void MainWindow::SetMapMode(MapMode const mapMode)
+@@ -584,6 +613,8 @@ void MainWindow::OnLocationError(location::TLocationError errorCode)
+ 
+ void MainWindow::OnLocationUpdated(location::GpsInfo const & info)
+ {
++  if (m_mobileUi)
++    m_mobileUi->SetGpsAccuracy(info.m_horizontalAccuracy);
+   m_pDrawWidget->GetFramework().OnLocationUpdate(info);
+ }
+ 
+@@ -915,6 +946,8 @@ void MainWindow::SetMapMode(MapMode const mapMode)
    else
      m_publicTransportMapMode->setMainIcon(QIcon(":/navig64/mode_public-transport.png"));
  #endif  // BUILD_DESIGNER
@@ -491,7 +500,7 @@ index 9aaf07c..2beb3d8 100644
  }
  
  void MainWindow::OnMapModeChange(MapMode const mapMode)
-@@ -922,6 +953,129 @@ void MainWindow::OnMapModeChange(MapMode const mapMode)
+@@ -922,6 +955,129 @@ void MainWindow::OnMapModeChange(MapMode const mapMode)
    SetMapMode(mapMode);
  }
  
@@ -1479,10 +1488,10 @@ index 0000000..0d61835
 +Q_COREAPP_STARTUP_FUNCTION(UtComapsInstallKeepDisplayOn)
 diff --git a/qt/ut_mobile_ui.cpp b/qt/ut_mobile_ui.cpp
 new file mode 100644
-index 0000000..0a02b03
+index 0000000..d703261
 --- /dev/null
 +++ b/qt/ut_mobile_ui.cpp
-@@ -0,0 +1,1667 @@
+@@ -0,0 +1,1744 @@
 +#include "qt/ut_mobile_ui.hpp"
 +
 +#include "qt/draw_widget.hpp"
@@ -1501,6 +1510,7 @@ index 0000000..0a02b03
 +
 +#include <QtCore/QCoreApplication>
 +#include <QtCore/QDir>
++#include <QtCore/QDateTime>
 +#include <QtCore/QEvent>
 +#include <QtCore/QFileInfo>
 +#include <QtCore/QPointer>
@@ -2487,6 +2497,15 @@ index 0000000..0a02b03
 +      m_actions.myPosition();
 +  });
 +
++  m_gpsChip = new QLabel(this);
++  m_gpsChip->setObjectName("utGpsChip");
++  m_gpsChip->setAlignment(Qt::AlignCenter);
++  m_gpsChip->setAttribute(Qt::WA_TransparentForMouseEvents);
++  m_gpsChip->hide();
++  m_gpsTimer = new QTimer(this);
++  m_gpsTimer->setInterval(1000);
++  connect(m_gpsTimer, &QTimer::timeout, this, [this] { UpdateGpsChip(); });
++
 +  auto * country = new QPushButton(this);
 +  country->setObjectName("utCountryButton");
 +  country->setCursor(Qt::PointingHandCursor);
@@ -2716,6 +2735,16 @@ index 0000000..0a02b03
 +{
 +  if (!m_locationButton)
 +    return;
++  if (mode == location::PendingPosition)
++  {
++    if (m_gpsSearchStart == 0)
++      m_gpsSearchStart = QDateTime::currentMSecsSinceEpoch();
++  }
++  else
++  {
++    m_gpsSearchStart = 0;
++  }
++  UpdateGpsChip();
 +  Style const & st = CurrentStyle();
 +  switch (mode)
 +  {
@@ -2737,6 +2766,56 @@ index 0000000..0a02b03
 +    m_locationButton->SetIconColor(st.locationBlue);
 +    break;
 +  }
++}
++
++void MapUi::SetGpsAccuracy(double meters)
++{
++  if (!m_gpsChip)
++    return;
++  m_gpsSearchStart = 0;
++  m_gpsChip->setProperty("accuracy", meters);
++  // Shown for a few seconds after a fix arrives.
++  if (m_gpsShowUntil < QDateTime::currentMSecsSinceEpoch())
++    m_gpsShowUntil = QDateTime::currentMSecsSinceEpoch() + 5000;
++  UpdateGpsChip();
++}
++
++void MapUi::UpdateGpsChip()
++{
++  if (!m_gpsChip)
++    return;
++  Style const & st = CurrentStyle();
++  qint64 const now = QDateTime::currentMSecsSinceEpoch();
++  QString text;
++  if (m_gpsSearchStart > 0)
++  {
++    qint64 const secs = (now - m_gpsSearchStart) / 1000;
++    text = Tr("GPS searching … %1:%2", "GPS sucht … %1:%2").arg(secs / 60).arg(secs % 60, 2, 10, QChar('0'));
++  }
++  else if (now < m_gpsShowUntil && m_gpsChip->property("accuracy").isValid())
++  {
++    double const acc = m_gpsChip->property("accuracy").toDouble();
++    text = acc > 0 ? Tr("GPS ±%1 m", "GPS ±%1 m").arg(qRound(acc)) : Tr("GPS fix", "GPS-Position");
++  }
++  bool const show = !text.isEmpty();
++  if (show)
++  {
++    QColor bg = st.panel;
++    m_gpsChip->setStyleSheet(QString("QLabel#utGpsChip { background: %1; color: %2; border-radius: 15px;"
++                                     " padding: 0 12px; font-size: 14px; font-weight: bold; }")
++                                 .arg(Rgba(bg), Hex(m_gpsSearchStart > 0 ? st.secondary : st.locationBlue)));
++    m_gpsChip->setText(text);
++    m_gpsChip->adjustSize();
++    m_gpsChip->setFixedHeight(30);
++  }
++  bool const wasVisible = m_gpsChip->isVisible();
++  m_gpsChip->setVisible(show);
++  if (show && !m_gpsTimer->isActive())
++    m_gpsTimer->start();
++  else if (!show && m_gpsTimer->isActive())
++    m_gpsTimer->stop();
++  if (show != wasVisible || show)
++    Relayout();
 +}
 +
 +void MapUi::SetLocationEnabled(bool enabled)
@@ -3118,6 +3197,13 @@ index 0000000..0a02b03
 +  int const pillX = kMargin + kButton + 10;
 +  m_searchPill->setGeometry(pillX, rowY, w - 2 * pillX, kButton);
 +  m_locationButton->move(w - kMargin - kButton, rowY);
++  if (m_gpsChip && m_gpsChip->isVisible())
++  {
++    int const cw = m_gpsChip->sizeHint().width();
++    // Above the location button (the search bar sits left of it).
++    m_gpsChip->setGeometry(w - kMargin - cw, rowY - 8 - 30, cw, 30);
++    m_gpsChip->raise();
++  }
 +
 +  // Map download banner above the bottom controls.
 +  bool const country = m_countryState != CountryState::None && !sheet;
@@ -3152,10 +3238,10 @@ index 0000000..0a02b03
 +}  // namespace qt
 diff --git a/qt/ut_mobile_ui.hpp b/qt/ut_mobile_ui.hpp
 new file mode 100644
-index 0000000..adc2c9c
+index 0000000..e83f503
 --- /dev/null
 +++ b/qt/ut_mobile_ui.hpp
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,248 @@
 +#pragma once
 +
 +// ut-comaps: phone user interface for the CoMaps Qt frontend, modelled on the
@@ -3182,6 +3268,7 @@ index 0000000..adc2c9c
 +#include <vector>
 +
 +class QLabel;
++class QTimer;
 +class QVBoxLayout;
 +class QScrollArea;
 +
@@ -3335,6 +3422,8 @@ index 0000000..adc2c9c
 +
 +  void SetLocationMode(location::EMyPositionMode mode);
 +  void SetLocationEnabled(bool enabled);
++  // GPS status next to the location button: search time, then accuracy.
++  void SetGpsAccuracy(double meters);
 +  void SetCountryState(CountryState state, QString const & text);
 +  void RefreshModes();
 +
@@ -3371,6 +3460,11 @@ index 0000000..adc2c9c
 +  RoundButton * m_layersButton = nullptr;
 +  RoundButton * m_bookmarksButton = nullptr;
 +  RoundButton * m_locationButton = nullptr;
++  QLabel * m_gpsChip = nullptr;
++  QTimer * m_gpsTimer = nullptr;
++  qint64 m_gpsSearchStart = 0;  // ms since epoch, 0 = not searching
++  qint64 m_gpsShowUntil = 0;
++  void UpdateGpsChip();
 +  ModeSelector * m_modes = nullptr;
 +  QAbstractButton * m_searchPill = nullptr;
 +  Card * m_menuCard = nullptr;

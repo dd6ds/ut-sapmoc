@@ -79,8 +79,51 @@ index 8d4277f..32d633a 100644
    auto const it = g_type2localizedType.find(key);
    std::string localizedName = (it != g_type2localizedType.end()) ? it->second : std::string();
    return localizedName.empty() ? type : localizedName;
+diff --git a/libs/platform/location_service/location_service.cpp b/libs/platform/location_service/location_service.cpp
+index 1f9c15b..433cedd 100644
+--- a/libs/platform/location_service/location_service.cpp
++++ b/libs/platform/location_service/location_service.cpp
+@@ -1,5 +1,9 @@
+ #include "platform/location_service/location_service.hpp"
+ 
++#include "base/logging.hpp"
++
++#include <cmath>
++
+ #include "std/target_os.hpp"
+ 
+ #include <ctime>
+@@ -31,6 +35,9 @@ public:
+   /// @return true if location should be sent to observers
+   bool Passes(location::GpsInfo const & newLocation)
+   {
++    // ut-comaps: GNSS drivers behind lomiri-location-service (libhybris) may
++    // stamp positions with another time base; a fix must not be dropped for it.
++    // Such stamps are replaced by "now" in DesktopLocationService.
+     if (std::time(nullptr) - newLocation.m_timestamp > 300.0)
+       return false;
+ 
+@@ -62,8 +69,17 @@ class DesktopLocationService
+ 
+   virtual void OnLocationError(location::TLocationError errorCode) { m_observer.OnLocationError(errorCode); }
+ 
+-  virtual void OnLocationUpdated(GpsInfo const & info)
++  virtual void OnLocationUpdated(GpsInfo const & original)
+   {
++    GpsInfo info = original;
++    double const now = static_cast<double>(std::time(nullptr));
++    if (std::abs(now - info.m_timestamp) > 300.0)
++    {
++      static int logged = 0;
++      if (logged++ < 3)
++        LOG(LWARNING, ("Location timestamp off by", info.m_timestamp - now, "s - using the current time"));
++      info.m_timestamp = now;
++    }
+     if (m_filter.Passes(info))
+       m_observer.OnLocationUpdated(info);
+   }
 diff --git a/libs/platform/location_service/qt_location_service.cpp b/libs/platform/location_service/qt_location_service.cpp
-index dd4d1a2..3ef632a 100644
+index dd4d1a2..b1b8db0 100644
 --- a/libs/platform/location_service/qt_location_service.cpp
 +++ b/libs/platform/location_service/qt_location_service.cpp
 @@ -63,7 +63,14 @@ QtLocationService::QtLocationService(location::LocationObserver & observer, std:
@@ -99,3 +142,21 @@ index dd4d1a2..3ef632a 100644
  
    if (!m_positionSource)
    {
+@@ -108,6 +115,17 @@ void QtLocationService::OnLocationUpdate(QGeoPositionInfo const & info)
+   }
+   auto const & coordinate = info.coordinate();
+   LOG(LDEBUG, ("Location updated with valid coordinates:", coordinate.longitude(), coordinate.latitude()));
++  // ut-comaps: log the first fixes (helps when no position shows up).
++  static int logged = 0;
++  if (logged < 5)
++  {
++    ++logged;
++    LOG(LINFO, ("Position update from", m_positionSource->sourceName().toStdString(), "age s:",
++                info.timestamp().secsTo(QDateTime::currentDateTimeUtc()), "accuracy m:",
++                info.hasAttribute(QGeoPositionInfo::HorizontalAccuracy)
++                    ? info.attribute(QGeoPositionInfo::HorizontalAccuracy)
++                    : -1.0));
++  }
+   m_observer.OnLocationUpdated(
+       gpsInfoFromQGeoPositionInfo(info, qStringToTLocationSource(m_positionSource->sourceName())));
+   if (!m_clientIsActive)
