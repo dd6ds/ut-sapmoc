@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=ut-sapmoc
+Comment=Offline maps & navigation (OpenStreetMap)
+Exec=ut-sapmoc
+Icon=ut-sapmoc.svg
+Terminal=false
+Type=Application
+Categories=Navigation;Utility;Maps;
+Keywords=maps;navigation;osm;offline;
+X-Lomiri-Touch=true

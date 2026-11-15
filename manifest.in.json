@@ -1,0 +1,17 @@
+{
+    "name": "ut-sapmoc",
+    "version": "@CLICK_VERSION@",
+    "architecture": "@CLICK_ARCH@",
+    "framework": "@CLICK_FRAMEWORK@",
+    "title": "ut-sapmoc",
+    "description": "Offline-Karten und Navigation auf Basis von OpenStreetMap. Basiert auf dem Open-Source-Projekt CoMaps (Apache-2.0).",
+    "maintainer": "Dennis <dd6ds@eclipso.de>",
+    "type": "app",
+    "icon": "ut-sapmoc.svg",
+    "hooks": {
+        "ut-sapmoc": {
+            "apparmor": "ut-sapmoc.apparmor",
+            "desktop": "ut-sapmoc.desktop"
+        }
+    }
+}
