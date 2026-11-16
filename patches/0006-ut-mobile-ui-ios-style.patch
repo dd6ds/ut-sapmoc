@@ -1,8 +1,8 @@
 diff --git a/qt/CMakeLists.txt b/qt/CMakeLists.txt
-index 220ed5e..5f00d98 100644
+index 220ed5e..d937953 100644
 --- a/qt/CMakeLists.txt
 +++ b/qt/CMakeLists.txt
-@@ -64,10 +64,19 @@ set(SRC
+@@ -64,10 +64,21 @@ set(SRC
    update_dialog.cpp
    update_dialog.hpp
    ut_fit_screen.cpp
@@ -14,6 +14,8 @@ index 220ed5e..5f00d98 100644
 +  ut_mobile_ui.hpp
 +  ut_test_hook.cpp
 +  ut_test_hook.hpp
++  ut_voice.cpp
++  ut_voice.hpp
  )
  
 +# ut-comaps: keep the display on (repowerd D-Bus API).
@@ -22,7 +24,7 @@ index 220ed5e..5f00d98 100644
  omim_add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${RES_SOURCES} ${SRC})
  
  set_target_properties(${PROJECT_NAME} PROPERTIES AUTOMOC ON)
-@@ -96,6 +105,8 @@ target_link_libraries(${PROJECT_NAME}
+@@ -96,8 +107,15 @@ target_link_libraries(${PROJECT_NAME}
  target_link_libraries(${PROJECT_NAME}
    PRIVATE
      gflags::gflags
@@ -30,7 +32,14 @@ index 220ed5e..5f00d98 100644
 +    Qt6::DBus
  )
  
++# ut-comaps: spoken turn instructions (Pico TTS, PulseAudio).
++find_package(PkgConfig REQUIRED)
++pkg_check_modules(UT_PULSE REQUIRED IMPORTED_TARGET libpulse-simple)
++target_link_libraries(${PROJECT_NAME} PRIVATE ttspico PkgConfig::UT_PULSE)
++
  if (BUILD_DESIGNER)
+   target_link_libraries(${PROJECT_NAME} PRIVATE generator)
+   set(BUNDLE_NAME "CoMaps-Designer")
 diff --git a/qt/draw_widget.cpp b/qt/draw_widget.cpp
 index 1bb44ea..d47f4b5 100644
 --- a/qt/draw_widget.cpp
@@ -438,21 +447,32 @@ index 0248426..e9ee2ec 100644
  
  #ifdef DEBUG
 diff --git a/qt/mainwindow.cpp b/qt/mainwindow.cpp
-index 9aaf07c..4781e5e 100644
+index 9aaf07c..0364f48 100644
 --- a/qt/mainwindow.cpp
 +++ b/qt/mainwindow.cpp
-@@ -11,6 +11,10 @@
+@@ -11,7 +11,13 @@
  #include "qt/routing_settings_dialog.hpp"
  #include "qt/screenshoter.hpp"
  #include "qt/search_panel.hpp"
 +#include "qt/ut_mobile_ui.hpp"
 +#include "qt/ut_test_hook.hpp"
-+
-+#include "geometry/mercator.hpp"
++#include "qt/ut_voice.hpp"
  
++#include "geometry/mercator.hpp"
++
++#include "platform/measurement_utils.hpp"
  #include "platform/platform.hpp"
  #include "platform/settings.hpp"
-@@ -122,7 +126,9 @@ MainWindow::MainWindow(Framework & framework, std::unique_ptr<ScreenshotParams>
+ 
+@@ -34,6 +40,7 @@
+ #include "drape_frontend/debug_rect_renderer.hpp"
+ #endif  // BUILD_DESIGNER
+ 
++#include <QtCore/QDateTime>
+ #include <QtGui/QCloseEvent>
+ #include <QtWidgets/QDockWidget>
+ #include <QtWidgets/QFileDialog>
+@@ -122,7 +129,9 @@ MainWindow::MainWindow(Framework & framework, std::unique_ptr<ScreenshotParams>
    int const height = m_screenshotMode ? static_cast<int>(screenshotParams->m_height) : 0;
    m_pDrawWidget = new DrawWidget(framework, std::move(screenshotParams), this);
  
@@ -463,7 +483,7 @@ index 9aaf07c..4781e5e 100644
  
    if (m_screenshotMode)
    {
-@@ -177,6 +183,8 @@ MainWindow::MainWindow(Framework & framework, std::unique_ptr<ScreenshotParams>
+@@ -177,6 +186,8 @@ MainWindow::MainWindow(Framework & framework, std::unique_ptr<ScreenshotParams>
    }
  #endif
  
@@ -472,7 +492,7 @@ index 9aaf07c..4781e5e 100644
    // Always show on full screen.
    showMaximized();
  
-@@ -245,6 +253,9 @@ bool MainWindow::nativeEvent(QByteArray const & eventType, void * message, qintp
+@@ -245,6 +256,9 @@ bool MainWindow::nativeEvent(QByteArray const & eventType, void * message, qintp
  
  void MainWindow::LocationStateModeChanged(location::EMyPositionMode mode)
  {
@@ -482,7 +502,7 @@ index 9aaf07c..4781e5e 100644
    if (mode == location::PendingPosition)
    {
      m_locationService->Start();
-@@ -465,6 +476,7 @@ void MainWindow::CreateNavigationBar()
+@@ -465,6 +479,7 @@ void MainWindow::CreateNavigationBar()
      pToolBar->setVisible(false);
  
    addToolBar(Qt::RightToolBarArea, pToolBar);
@@ -490,7 +510,7 @@ index 9aaf07c..4781e5e 100644
  }
  
  Framework & MainWindow::GetFramework() const
-@@ -540,10 +552,17 @@ void MainWindow::CreateCountryStatusControls()
+@@ -540,10 +555,17 @@ void MainWindow::CreateCountryStatusControls()
      }
    };
  
@@ -510,7 +530,7 @@ index 9aaf07c..4781e5e 100644
    {
      // Storage also calls notifications for parents, but we are interested in leafs only.
      if (GetFramework().GetStorage().IsLeaf(countryId))
-@@ -553,6 +572,14 @@ void MainWindow::CreateCountryStatusControls()
+@@ -553,6 +575,14 @@ void MainWindow::CreateCountryStatusControls()
      std::stringstream str;
      str << "Downloading (" << countryId << ") " << progress.m_bytesDownloaded * 100 / progress.m_bytesTotal << "% (click to cancel)";
      m_cancelDownloadButton->setText(str.str().c_str());
@@ -525,7 +545,7 @@ index 9aaf07c..4781e5e 100644
    });
  }
  
-@@ -572,6 +599,8 @@ void MainWindow::OnLocationError(location::TLocationError errorCode)
+@@ -572,6 +602,8 @@ void MainWindow::OnLocationError(location::TLocationError errorCode)
    {
      if (m_pDrawWidget && m_pMyPositionAction)
        m_pMyPositionAction->setEnabled(false);
@@ -534,16 +554,18 @@ index 9aaf07c..4781e5e 100644
      break;
    }
  
-@@ -584,6 +613,8 @@ void MainWindow::OnLocationError(location::TLocationError errorCode)
+@@ -584,7 +616,10 @@ void MainWindow::OnLocationError(location::TLocationError errorCode)
  
  void MainWindow::OnLocationUpdated(location::GpsInfo const & info)
  {
 +  if (m_mobileUi)
 +    m_mobileUi->SetGpsAccuracy(info.m_horizontalAccuracy);
    m_pDrawWidget->GetFramework().OnLocationUpdate(info);
++  UpdateNavigation();
  }
  
-@@ -915,6 +946,8 @@ void MainWindow::SetMapMode(MapMode const mapMode)
+ void MainWindow::OnMyPosition()
+@@ -915,6 +950,8 @@ void MainWindow::SetMapMode(MapMode const mapMode)
    else
      m_publicTransportMapMode->setMainIcon(QIcon(":/navig64/mode_public-transport.png"));
  #endif  // BUILD_DESIGNER
@@ -552,7 +574,7 @@ index 9aaf07c..4781e5e 100644
  }
  
  void MainWindow::OnMapModeChange(MapMode const mapMode)
-@@ -922,6 +955,129 @@ void MainWindow::OnMapModeChange(MapMode const mapMode)
+@@ -922,6 +959,130 @@ void MainWindow::OnMapModeChange(MapMode const mapMode)
    SetMapMode(mapMode);
  }
  
@@ -578,6 +600,7 @@ index 9aaf07c..4781e5e 100644
 +  a.showBookmarks = [this] { OnBookmarksAction(); };
 +  a.showPreferences = [this] { OnPreferences(); };
 +  a.showRoutingSettings = [this] { OnRoutingSettings(); };
++  a.showVoiceSettings = [this] { mobile::ShowVoiceSettings(this); };
 +  a.showAbout = [this] { OnAbout(); };
 +  a.osmLogin = [this] { OnLoginMenuItem(); };
 +  a.createFeature = [this]
@@ -682,8 +705,121 @@ index 9aaf07c..4781e5e 100644
  void MainWindow::OnWalkingMapModeOptionChange(int8_t const index)
  {
    // Do nothing (yet)
+@@ -974,14 +1135,112 @@ void MainWindow::OnRoutePointSelected(RouteMarkType type)
+ 
+ void MainWindow::OnFollowRoute()
+ {
++  auto & routingManager = m_pDrawWidget->GetFramework().GetRoutingManager();
++  mobile::VoiceSettings const voice = mobile::VoiceSettings::Load();
++  routingManager.SetTurnNotificationsUnits(measurement_utils::GetMeasurementUnits());
++  routingManager.SetTurnNotificationsLocale(voice.NotificationLocale());
++  routingManager.EnableTurnNotifications(voice.enabled);
+   m_pDrawWidget->FollowRoute();
++  if (routingManager.IsRoutingFollowing() && voice.enabled)
++    mobile::Speaker::Instance().Say(mobile::Tr("Route guidance started.", "Routenführung gestartet."));
++  UpdateNavigation();
+ }
+ 
+ void MainWindow::OnClearRoute()
+ {
++  mobile::Speaker::Instance().Clear();
++  m_navigating = false;
+   m_pDrawWidget->ClearRoute();
+ }
+ 
++namespace
++{
++// Arrow for the next manoeuvre in the route card.
++QString TurnSymbol(routing::FollowingInfo const & info)
++{
++  using routing::turns::CarDirection;
++  using routing::turns::PedestrianDirection;
++  if (info.m_turn == CarDirection::None)
++  {
++    switch (info.m_pedestrianTurn)
++    {
++    case PedestrianDirection::TurnLeft: return QString::fromUtf8("\u2190");
++    case PedestrianDirection::TurnRight: return QString::fromUtf8("\u2192");
++    case PedestrianDirection::ReachedYourDestination: return QString::fromUtf8("\u2691");
++    default: return QString::fromUtf8("\u2191");
++    }
++  }
++  switch (info.m_turn)
++  {
++  case CarDirection::TurnRight: return QString::fromUtf8("\u2192");
++  case CarDirection::TurnSharpRight: return QString::fromUtf8("\u2198");
++  case CarDirection::TurnSlightRight:
++  case CarDirection::ExitHighwayToRight: return QString::fromUtf8("\u2197");
++  case CarDirection::TurnLeft: return QString::fromUtf8("\u2190");
++  case CarDirection::TurnSharpLeft: return QString::fromUtf8("\u2199");
++  case CarDirection::TurnSlightLeft:
++  case CarDirection::ExitHighwayToLeft: return QString::fromUtf8("\u2196");
++  case CarDirection::UTurnLeft:
++  case CarDirection::UTurnRight: return QString::fromUtf8("\u21BA");
++  case CarDirection::EnterRoundAbout:
++  case CarDirection::StayOnRoundAbout:
++  case CarDirection::LeaveRoundAbout:
++    return info.m_exitNum > 0 ? QString::fromUtf8("\u27F3 %1").arg(info.m_exitNum) : QString::fromUtf8("\u27F3");
++  case CarDirection::ReachedYourDestination: return QString::fromUtf8("\u2691");
++  default: return QString::fromUtf8("\u2191");
++  }
++}
++
++QString FormatRemaining(int seconds)
++{
++  int const minutes = std::max(0, (seconds + 30) / 60);
++  if (minutes < 60)
++    return QString("%1 min").arg(minutes);
++  return QString("%1 h %2 min").arg(minutes / 60).arg(minutes % 60);
++}
++}  // namespace
++
++void MainWindow::UpdateNavigation()
++{
++  if (!m_mobileUi)
++    return;
++  auto & routingManager = m_pDrawWidget->GetFramework().GetRoutingManager();
++  if (!routingManager.IsRoutingActive() || !routingManager.IsRoutingFollowing())
++  {
++    m_navigating = false;
++    return;
++  }
++  m_navigating = true;
++
++  routing::FollowingInfo info;
++  routingManager.GetRouteFollowingInfo(info);
++  if (info.IsValid())
++  {
++    QString primary = TurnSymbol(info) + "  " + QString::fromStdString(info.m_distToTurn.ToString());
++    QString const street = QString::fromStdString(info.m_nextStreetName);
++    if (!street.isEmpty())
++      primary += "  " + street;
++    QString const arrival = QDateTime::currentDateTime().addSecs(info.m_time).toString("HH:mm");
++    QString const secondary = FormatRemaining(info.m_time) + QString::fromUtf8("  \u00B7  ") +
++                              mobile::Tr("Arrival %1", "Ankunft %1").arg(arrival) +
++                              QString::fromUtf8("  \u00B7  ") +
++                              QString::fromStdString(info.m_distToTarget.ToString());
++    m_mobileUi->ShowNavigation(primary, secondary);
++  }
++
++  mobile::VoiceSettings const voice = mobile::VoiceSettings::Load();
++  if (routingManager.AreTurnNotificationsEnabled() != voice.enabled)
++    routingManager.EnableTurnNotifications(voice.enabled);
++  if (!voice.enabled)
++    return;
++  if (routingManager.GetTurnNotificationsLocale() != voice.NotificationLocale())
++    routingManager.SetTurnNotificationsLocale(voice.NotificationLocale());
++  std::vector<std::string> notifications;
++  routingManager.GenerateNotifications(notifications, voice.streets);
++  for (auto const & text : notifications)
++    mobile::Speaker::Instance().Say(QString::fromStdString(text));
++}
++
+ void MainWindow::OnRoutingSettings()
+ {
+   RoutingSettings dlg(this, m_pDrawWidget->GetFramework());
 diff --git a/qt/mainwindow.hpp b/qt/mainwindow.hpp
-index 0aae592..c2da6f2 100644
+index 0aae592..fe0bf2b 100644
 --- a/qt/mainwindow.hpp
 +++ b/qt/mainwindow.hpp
 @@ -20,6 +20,7 @@ class Framework;
@@ -705,17 +841,18 @@ index 0aae592..c2da6f2 100644
  class DrawWidget;
  class PopupMenuHolder;
  struct ScreenshotParams;
-@@ -37,6 +42,9 @@ class MainWindow
+@@ -37,6 +42,10 @@ class MainWindow
    , location::LocationObserver
  {
    DrawWidget * m_pDrawWidget = nullptr;
 +  // ut-comaps: phone user interface (floating controls over the map).
 +  mobile::MapUi * m_mobileUi = nullptr;
++  bool m_navigating = false;
 +  QToolBar * m_navToolBar = nullptr;
    // TODO(mgsergio): Make indexing more informative.
    std::array<QDockWidget *, 1> m_Docks;
  
-@@ -94,6 +102,8 @@ protected:
+@@ -94,6 +103,8 @@ protected:
    void CreateNavigationBar();
    void CreateSearchBarAndPanel();
    void CreateCountryStatusControls();
@@ -724,6 +861,15 @@ index 0aae592..c2da6f2 100644
  
    void SetMapMode(MapMode mapMode);
  
+@@ -142,6 +153,8 @@ protected Q_SLOTS:
+   void OnRoutePointSelected(RouteMarkType type);
+   void OnFollowRoute();
+   void OnClearRoute();
++  // ut-comaps: route card text and voice instructions while navigating.
++  void UpdateNavigation();
+   void OnRoutingSettings();
+ 
+   void OnBookmarksAction();
 diff --git a/qt/search_panel.cpp b/qt/search_panel.cpp
 index 8e08b5e..2e791a2 100644
 --- a/qt/search_panel.cpp
@@ -1540,10 +1686,10 @@ index 0000000..0d61835
 +Q_COREAPP_STARTUP_FUNCTION(UtComapsInstallKeepDisplayOn)
 diff --git a/qt/ut_mobile_ui.cpp b/qt/ut_mobile_ui.cpp
 new file mode 100644
-index 0000000..d703261
+index 0000000..2d666e4
 --- /dev/null
 +++ b/qt/ut_mobile_ui.cpp
-@@ -0,0 +1,1744 @@
+@@ -0,0 +1,1776 @@
 +#include "qt/ut_mobile_ui.hpp"
 +
 +#include "qt/draw_widget.hpp"
@@ -2022,6 +2168,15 @@ index 0000000..d703261
 +  {
 +    width(3.0);
 +    p.drawEllipse(QPointF(12, 12), 6.5, 6.5);
++  }
++  else if (name == "speaker")
++  {
++    fill();
++    p.drawPolygon(QPolygonF({{3, 9}, {7.5, 9}, {13, 4}, {13, 20}, {7.5, 15}, {3, 15}}));
++    width(1.8);
++    p.setBrush(Qt::NoBrush);
++    p.drawArc(QRectF(10, 8, 8, 8), -60 * 16, 120 * 16);
++    p.drawArc(QRectF(9, 4.5, 13, 15), -60 * 16, 120 * 16);
 +  }
 +  p.restore();
 +}
@@ -2664,6 +2819,8 @@ index 0000000..d703261
 +      [this] { if (m_actions.showBookmarks) m_actions.showBookmarks(); });
 +  add("utMenuRoutingSettings", "track", Tr("Routing options", "Routenoptionen"),
 +      [this] { if (m_actions.showRoutingSettings) m_actions.showRoutingSettings(); });
++  add("utMenuVoice", "speaker", Tr("Voice instructions", "Sprachansagen"),
++      [this] { if (m_actions.showVoiceSettings) m_actions.showVoiceSettings(); });
 +  m_rulerRow = new RowButton("ruler", Tr("Ruler", "Lineal"), m_menuCard);
 +  m_rulerRow->setObjectName("utMenuRuler");
 +  m_rulerRow->setCheckable(true);
@@ -2892,6 +3049,10 @@ index 0000000..d703261
 +{
 +  if (!m_routeCard)
 +    return;
++  // While navigating the card shows the next manoeuvre (ShowNavigation);
++  // a rebuilt route (rerouting) must not switch it back to the summary.
++  if (m_navigating && !error)
++    return;
 +  m_routePrimary->setText(primary);
 +  m_routeSecondary->setText(secondary);
 +  m_routeSecondary->setVisible(!secondary.isEmpty());
@@ -2910,7 +3071,24 @@ index 0000000..d703261
 +void MapUi::HideRoute()
 +{
 +  m_routeWanted = false;
++  m_navigating = false;
 +  Relayout();
++}
++
++void MapUi::ShowNavigation(QString const & primary, QString const & secondary)
++{
++  if (!m_routeCard)
++    return;
++  m_navigating = true;
++  m_routePrimary->setText(primary);
++  m_routeSecondary->setText(secondary);
++  m_routeSecondary->setVisible(!secondary.isEmpty());
++  m_routeStart->setVisible(false);
++  if (!m_routeWanted)
++  {
++    m_routeWanted = true;
++    Relayout();
++  }
 +}
 +
 +void MapUi::ToggleCard(Card * card)
@@ -3290,10 +3468,10 @@ index 0000000..d703261
 +}  // namespace qt
 diff --git a/qt/ut_mobile_ui.hpp b/qt/ut_mobile_ui.hpp
 new file mode 100644
-index 0000000..e83f503
+index 0000000..00745c6
 --- /dev/null
 +++ b/qt/ut_mobile_ui.hpp
-@@ -0,0 +1,248 @@
+@@ -0,0 +1,252 @@
 +#pragma once
 +
 +// ut-comaps: phone user interface for the CoMaps Qt frontend, modelled on the
@@ -3448,6 +3626,7 @@ index 0000000..e83f503
 +    std::function<void()> showBookmarks;
 +    std::function<void()> showPreferences;
 +    std::function<void()> showRoutingSettings;
++    std::function<void()> showVoiceSettings;
 +    std::function<void()> showAbout;
 +    std::function<void()> osmLogin;
 +    std::function<void()> createFeature;
@@ -3481,6 +3660,8 @@ index 0000000..e83f503
 +
 +  void ShowRoute(QString const & primary, QString const & secondary, bool error, bool canStart);
 +  void HideRoute();
++  // Turn-by-turn: next manoeuvre and the remaining trip in the route card.
++  void ShowNavigation(QString const & primary, QString const & secondary);
 +
 +  void ShowPlace(place_page::Info const & info, search::ReverseGeocoder::Address const & address);
 +  void HidePlace();
@@ -3533,6 +3714,7 @@ index 0000000..e83f503
 +  QAbstractButton * m_routeStart = nullptr;
 +
 +  bool m_routeWanted = false;
++  bool m_navigating = false;
 +
 +  Card * m_sheet = nullptr;
 +  QScrollArea * m_sheetScroll = nullptr;
@@ -3931,3 +4113,564 @@ index 0000000..7391cd3
 +void RegisterCommand(QString const & name, Command command);
 +bool Enabled();
 +}  // namespace ut_test
+diff --git a/qt/ut_voice.cpp b/qt/ut_voice.cpp
+new file mode 100644
+index 0000000..ff82dc3
+--- /dev/null
++++ b/qt/ut_voice.cpp
+@@ -0,0 +1,473 @@
++#include "qt/ut_voice.hpp"
++
++#include "qt/ut_mobile_ui.hpp"
++
++#include "platform/platform.hpp"
++#include "platform/preferred_languages.hpp"
++#include "platform/settings.hpp"
++
++#include "base/logging.hpp"
++
++#include <QtCore/QFile>
++#include <QtWidgets/QButtonGroup>
++#include <QtWidgets/QCheckBox>
++#include <QtWidgets/QDialog>
++#include <QtWidgets/QLabel>
++#include <QtWidgets/QPushButton>
++#include <QtWidgets/QRadioButton>
++#include <QtWidgets/QScrollArea>
++#include <QtWidgets/QSlider>
++#include <QtWidgets/QVBoxLayout>
++
++#include <pulse/error.h>
++#include <pulse/simple.h>
++
++extern "C"
++{
++#include <picoapi.h>
++#include <picodefs.h>
++}
++
++#include <algorithm>
++#include <cstdint>
++
++namespace qt
++{
++namespace mobile
++{
++namespace
++{
++char const kEnabled[] = "UtVoiceEnabled";
++char const kVoice[] = "UtVoice";
++char const kVolume[] = "UtVoiceVolume";
++char const kStreets[] = "UtVoiceStreets";
++
++// Lingware of a voice: text analysis + signal generation file.
++struct VoiceFiles
++{
++  char const * code;
++  char const * ta;
++  char const * sg;
++};
++VoiceFiles const kVoiceFiles[] = {
++    {"de-DE", "de-DE_ta.bin", "de-DE_gl0_sg.bin"}, {"en-GB", "en-GB_ta.bin", "en-GB_kh0_sg.bin"},
++    {"en-US", "en-US_ta.bin", "en-US_lh0_sg.bin"}, {"fr-FR", "fr-FR_ta.bin", "fr-FR_nk0_sg.bin"},
++    {"es-ES", "es-ES_ta.bin", "es-ES_zl0_sg.bin"}, {"it-IT", "it-IT_ta.bin", "it-IT_cm0_sg.bin"},
++};
++
++// Folder with the Pico voices: in the click package, else the system one.
++std::string PicoDir()
++{
++  std::string const bundled = GetPlatform().ResourcesDir() + "ut-pico/";
++  if (QFile::exists(QString::fromStdString(bundled + "de-DE_ta.bin")))
++    return bundled;
++  return "/usr/share/pico/lang/";
++}
++
++class PicoEngine
++{
++public:
++  ~PicoEngine() { Close(); }
++
++  bool Open(QString const & voice)
++  {
++    if (m_engine && voice == m_voice)
++      return true;
++    Close();
++    auto const it = std::find_if(std::begin(kVoiceFiles), std::end(kVoiceFiles),
++                                 [&voice](VoiceFiles const & v) { return voice == v.code; });
++    if (it == std::end(kVoiceFiles))
++      return false;
++
++    m_memory.assign(2500000, 0);
++    if (pico_initialize(m_memory.data(), static_cast<pico_Uint32>(m_memory.size()), &m_system) != PICO_OK)
++    {
++      LOG(LWARNING, ("Pico: initialize failed"));
++      m_system = nullptr;
++      return false;
++    }
++    std::string const dir = PicoDir();
++    std::string const ta = dir + it->ta;
++    std::string const sg = dir + it->sg;
++    pico_Retstring taName, sgName;
++    if (pico_loadResource(m_system, reinterpret_cast<pico_Char const *>(ta.c_str()), &m_ta) != PICO_OK ||
++        pico_loadResource(m_system, reinterpret_cast<pico_Char const *>(sg.c_str()), &m_sg) != PICO_OK ||
++        pico_getResourceName(m_system, m_ta, taName) != PICO_OK ||
++        pico_getResourceName(m_system, m_sg, sgName) != PICO_OK ||
++        pico_createVoiceDefinition(m_system, kName) != PICO_OK ||
++        pico_addResourceToVoiceDefinition(m_system, kName, reinterpret_cast<pico_Char *>(taName)) != PICO_OK ||
++        pico_addResourceToVoiceDefinition(m_system, kName, reinterpret_cast<pico_Char *>(sgName)) != PICO_OK ||
++        pico_newEngine(m_system, kName, &m_engine) != PICO_OK)
++    {
++      LOG(LWARNING, ("Pico: cannot load voice", voice.toStdString(), "from", dir));
++      m_engine = nullptr;
++      Close();
++      return false;
++    }
++    m_voice = voice;
++    LOG(LINFO, ("Pico: voice", voice.toStdString(), "loaded from", dir));
++    return true;
++  }
++
++  void Close()
++  {
++    if (!m_system)
++      return;
++    if (m_engine)
++      pico_disposeEngine(m_system, &m_engine);
++    pico_releaseVoiceDefinition(m_system, kName);
++    if (m_sg)
++      pico_unloadResource(m_system, &m_sg);
++    if (m_ta)
++      pico_unloadResource(m_system, &m_ta);
++    pico_terminate(&m_system);
++    m_system = nullptr;
++    m_engine = nullptr;
++    m_ta = m_sg = nullptr;
++    m_voice.clear();
++  }
++
++  // 16 kHz, 16 bit, mono.
++  std::vector<int16_t> Synthesize(QString const & text)
++  {
++    std::vector<int16_t> pcm;
++    if (!m_engine)
++      return pcm;
++    QByteArray utf8 = text.toUtf8();
++    utf8.append('\0');  // the final '\0' makes Pico speak the last sentence
++    auto const * p = reinterpret_cast<pico_Char const *>(utf8.constData());
++    int left = utf8.size();
++    int16_t buffer[512];
++    while (left > 0)
++    {
++      pico_Int16 put = 0;
++      if (pico_putTextUtf8(m_engine, p, static_cast<pico_Int16>(std::min(left, 4096)), &put) != PICO_OK)
++        break;
++      left -= put;
++      p += put;
++      pico_Status status;
++      do
++      {
++        pico_Int16 bytes = 0, type = 0;
++        status = pico_getData(m_engine, buffer, sizeof(buffer), &bytes, &type);
++        pcm.insert(pcm.end(), buffer, buffer + bytes / 2);
++      } while (status == PICO_STEP_BUSY);
++      if (status != PICO_STEP_IDLE)
++      {
++        pico_resetEngine(m_engine, PICO_RESET_SOFT);
++        break;
++      }
++    }
++    return pcm;
++  }
++
++private:
++  pico_Char const * const kName = reinterpret_cast<pico_Char const *>("PicoVoice");
++
++  std::vector<char> m_memory;
++  pico_System m_system = nullptr;
++  pico_Resource m_ta = nullptr;
++  pico_Resource m_sg = nullptr;
++  pico_Engine m_engine = nullptr;
++  QString m_voice;
++};
++
++void Play(std::vector<int16_t> pcm, int volumePercent)
++{
++  if (pcm.empty())
++    return;
++  // Short silence first: some outputs (Bluetooth) cut the beginning off.
++  pcm.insert(pcm.begin(), 16000 / 5, 0);
++  double const gain = std::clamp(volumePercent, 10, 300) / 100.0;
++  if (gain != 1.0)
++  {
++    for (auto & s : pcm)
++      s = static_cast<int16_t>(std::clamp(static_cast<int>(s * gain), -32768, 32767));
++  }
++  pa_sample_spec spec;
++  spec.format = PA_SAMPLE_S16LE;
++  spec.rate = 16000;
++  spec.channels = 1;
++  int error = 0;
++  pa_simple * stream = pa_simple_new(nullptr, "ut-sapmoc", PA_STREAM_PLAYBACK, nullptr,
++                                     "Navigation", &spec, nullptr, nullptr, &error);
++  if (!stream)
++  {
++    LOG(LWARNING, ("PulseAudio:", pa_strerror(error)));
++    return;
++  }
++  if (pa_simple_write(stream, pcm.data(), pcm.size() * sizeof(int16_t), &error) < 0 ||
++      pa_simple_drain(stream, &error) < 0)
++    LOG(LWARNING, ("PulseAudio:", pa_strerror(error)));
++  pa_simple_free(stream);
++}
++}  // namespace
++
++// --- Settings ------------------------------------------------------------------------
++
++VoiceSettings VoiceSettings::Load()
++{
++  VoiceSettings s;
++  std::string voice;
++  int32_t volume = s.volume;
++  (void)settings::Get(kEnabled, s.enabled);
++  if (settings::Get(kVoice, voice))
++    s.voice = QString::fromStdString(voice);
++  if (settings::Get(kVolume, volume))
++    s.volume = std::clamp<int32_t>(volume, 30, 200);
++  (void)settings::Get(kStreets, s.streets);
++  return s;
++}
++
++void VoiceSettings::Save() const
++{
++  settings::Set(kEnabled, enabled);
++  settings::Set(kVoice, voice.toStdString());
++  settings::Set(kVolume, static_cast<int32_t>(volume));
++  settings::Set(kStreets, streets);
++}
++
++QString VoiceSettings::EffectiveVoice() const
++{
++  if (!voice.isEmpty())
++    return voice;
++  std::string const lang = languages::GetCurrentNorm();
++  auto const starts = [&lang](char const * p) { return lang.rfind(p, 0) == 0; };
++  if (starts("de"))
++    return "de-DE";
++  if (starts("fr"))
++    return "fr-FR";
++  if (starts("es"))
++    return "es-ES";
++  if (starts("it"))
++    return "it-IT";
++  if (lang == "en-US" || lang == "en_US")
++    return "en-US";
++  return "en-GB";
++}
++
++std::string VoiceSettings::NotificationLocale() const
++{
++  return EffectiveVoice().left(2).toStdString();
++}
++
++std::vector<std::pair<QString, QString>> const & PicoVoices()
++{
++  static std::vector<std::pair<QString, QString>> const voices = {
++      {"de-DE", "Deutsch"},          {"en-GB", "English (UK)"}, {"en-US", "English (US)"},
++      {"fr-FR", QString::fromUtf8("Français")}, {"es-ES", QString::fromUtf8("Español")},
++      {"it-IT", "Italiano"},
++  };
++  return voices;
++}
++
++// --- Speaker -------------------------------------------------------------------------
++
++Speaker & Speaker::Instance()
++{
++  static Speaker speaker;
++  return speaker;
++}
++
++Speaker::Speaker() : m_thread([this] { Run(); }) {}
++
++Speaker::~Speaker()
++{
++  {
++    std::lock_guard lock(m_mutex);
++    m_stop = true;
++    m_queue.clear();
++  }
++  m_cv.notify_all();
++  if (m_thread.joinable())
++    m_thread.join();
++}
++
++void Speaker::Say(QString const & text)
++{
++  if (text.trimmed().isEmpty())
++    return;
++  VoiceSettings const s = VoiceSettings::Load();
++  {
++    std::lock_guard lock(m_mutex);
++    m_queue.push_back({text, s.EffectiveVoice(), s.volume});
++  }
++  m_cv.notify_one();
++}
++
++void Speaker::Clear()
++{
++  std::lock_guard lock(m_mutex);
++  m_queue.clear();
++}
++
++void Speaker::Run()
++{
++  PicoEngine engine;
++  while (true)
++  {
++    Item item;
++    {
++      std::unique_lock lock(m_mutex);
++      m_cv.wait(lock, [this] { return m_stop || !m_queue.empty(); });
++      if (m_stop)
++        return;
++      item = std::move(m_queue.front());
++      m_queue.pop_front();
++    }
++    if (!engine.Open(item.voice))
++      continue;
++    LOG(LINFO, ("Voice:", item.text.toStdString()));
++    Play(engine.Synthesize(item.text), item.volume);
++  }
++}
++
++// --- Settings page -------------------------------------------------------------------
++
++namespace
++{
++QString SampleText(QString const & voice)
++{
++  if (voice.startsWith("de"))
++    return QString::fromUtf8("In dreihundert Metern rechts abbiegen. Dann links in die Hauptstraße.");
++  if (voice.startsWith("fr"))
++    return QString::fromUtf8("Dans trois cents mètres, tournez à droite.");
++  if (voice.startsWith("es"))
++    return QString::fromUtf8("En trescientos metros, gire a la derecha.");
++  if (voice.startsWith("it"))
++    return QString::fromUtf8("Tra trecento metri, svoltare a destra.");
++  return "In three hundred metres, turn right. Then turn left onto High Street.";
++}
++}  // namespace
++
++void ShowVoiceSettings(QWidget * parent)
++{
++  VoiceSettings s = VoiceSettings::Load();
++  Style const & st = CurrentStyle();
++
++  QDialog dlg(parent);
++  dlg.setObjectName("utVoiceSettings");
++  dlg.setWindowTitle(Tr("Voice instructions", "Sprachansagen"));
++  auto * outer = new QVBoxLayout(&dlg);
++  outer->setContentsMargins(16, 0, 16, 16);
++
++  auto * scroll = new QScrollArea(&dlg);
++  scroll->setWidgetResizable(true);
++  scroll->setFrameShape(QFrame::NoFrame);
++  auto * content = new QWidget(scroll);
++  auto * v = new QVBoxLayout(content);
++  v->setContentsMargins(0, 8, 0, 8);
++  v->setSpacing(10);
++  scroll->setWidget(content);
++  outer->addWidget(scroll, 1);
++
++  auto const heading = [&](QString const & text)
++  {
++    auto * l = new QLabel(text, content);
++    l->setStyleSheet(QString("color: %1; font-size: 14px; font-weight: 600; padding-top: 10px;")
++                         .arg(st.secondary.name()));
++    v->addWidget(l);
++  };
++
++  auto * enabled = new QCheckBox(Tr("Speak turn instructions", "Abbiegehinweise ansagen"), content);
++  enabled->setObjectName("utVoiceEnabled");
++  enabled->setChecked(s.enabled);
++  v->addWidget(enabled);
++
++  heading(Tr("VOICE", "STIMME"));
++  auto * group = new QButtonGroup(&dlg);
++  VoiceSettings automatic = s;
++  automatic.voice.clear();
++  QString autoName;
++  for (auto const & [code, name] : PicoVoices())
++  {
++    if (code == automatic.EffectiveVoice())
++      autoName = name;
++  }
++  auto * autoButton = new QRadioButton(Tr("Like the app language (%1)", "Wie die App-Sprache (%1)").arg(autoName),
++                                       content);
++  autoButton->setProperty("voice", QString());
++  group->addButton(autoButton);
++  v->addWidget(autoButton);
++  for (auto const & [code, name] : PicoVoices())
++  {
++    auto * b = new QRadioButton(name, content);
++    b->setProperty("voice", code);
++    group->addButton(b);
++    v->addWidget(b);
++  }
++  for (auto * b : group->buttons())
++    b->setChecked(b->property("voice").toString() == s.voice);
++
++  heading(Tr("VOLUME", "LAUTSTÄRKE"));
++  auto * volumeLabel = new QLabel(content);
++  auto * volume = new QSlider(Qt::Horizontal, content);
++  volume->setObjectName("utVoiceVolume");
++  volume->setRange(30, 200);
++  volume->setSingleStep(10);
++  volume->setPageStep(10);
++  volume->setValue(s.volume);
++  volume->setMinimumHeight(44);
++  auto const showVolume = [volumeLabel, volume]
++  {
++    volumeLabel->setText(QString("%1 %").arg(volume->value()));
++  };
++  showVolume();
++  v->addWidget(volumeLabel);
++  v->addWidget(volume);
++  auto * hint = new QLabel(Tr("Voice volume relative to the system volume. The overall volume is set with the "
++                              "volume keys.",
++                              "Lautstärke der Ansagen im Verhältnis zur Systemlautstärke. Die Gesamtlautstärke "
++                              "stellst du mit den Lautstärketasten ein."),
++                           content);
++  hint->setWordWrap(true);
++  hint->setStyleSheet(QString("color: %1; font-size: 13px;").arg(st.secondary.name()));
++  v->addWidget(hint);
++
++  heading(Tr("OPTIONS", "OPTIONEN"));
++  auto * streets = new QCheckBox(Tr("Announce street names", "Straßennamen ansagen"), content);
++  streets->setObjectName("utVoiceStreets");
++  streets->setChecked(s.streets);
++  v->addWidget(streets);
++
++  auto * test = new QPushButton(Tr("Play sample", "Probe anhören"), content);
++  test->setObjectName("utVoiceTest");
++  v->addSpacing(8);
++  v->addWidget(test);
++  v->addStretch(1);
++
++  auto * close = new QPushButton(Tr("Close", "Schließen"), &dlg);
++  outer->addWidget(close);
++
++  auto const save = [&]
++  {
++    s.enabled = enabled->isChecked();
++    if (auto * b = group->checkedButton())
++      s.voice = b->property("voice").toString();
++    s.volume = volume->value() / 10 * 10;
++    s.streets = streets->isChecked();
++    s.Save();
++  };
++  QObject::connect(enabled, &QCheckBox::toggled, &dlg, save);
++  QObject::connect(streets, &QCheckBox::toggled, &dlg, save);
++  QObject::connect(group, &QButtonGroup::buttonClicked, &dlg, save);
++  QObject::connect(volume, &QSlider::valueChanged, &dlg, [&, showVolume]
++  {
++    showVolume();
++    save();
++  });
++  QObject::connect(test, &QPushButton::clicked, &dlg, [&]
++  {
++    save();
++    Speaker::Instance().Clear();
++    Speaker::Instance().Say(SampleText(s.EffectiveVoice()));
++  });
++  QObject::connect(close, &QPushButton::clicked, &dlg, [&]
++  {
++    save();
++    dlg.accept();
++  });
++  dlg.exec();
++}
++}  // namespace mobile
++}  // namespace qt
+diff --git a/qt/ut_voice.hpp b/qt/ut_voice.hpp
+new file mode 100644
+index 0000000..70513ad
+--- /dev/null
++++ b/qt/ut_voice.hpp
+@@ -0,0 +1,76 @@
++#pragma once
++
++// ut-comaps: spoken turn instructions for the phone UI.
++//  - VoiceSettings: on/off, voice, volume, street names (CoMaps' settings.ini).
++//  - Speaker: Pico TTS (bundled voices) played through PulseAudio on a worker
++//    thread; texts are queued and spoken one after another.
++//  - ShowVoiceSettings: the settings page (menu "Voice instructions").
++
++#include <QtCore/QString>
++
++#include <condition_variable>
++#include <deque>
++#include <mutex>
++#include <string>
++#include <thread>
++#include <utility>
++#include <vector>
++
++class QWidget;
++
++namespace qt
++{
++namespace mobile
++{
++struct VoiceSettings
++{
++  bool enabled = true;
++  QString voice;      // "de-DE", ...; empty = like the app language
++  int volume = 130;   // percent, 30 ... 200
++  bool streets = true;
++
++  static VoiceSettings Load();
++  void Save() const;
++  // The Pico voice to use ("like the app language" resolved).
++  QString EffectiveVoice() const;
++  // Language of CoMaps' instruction texts for that voice ("de", "en", ...).
++  std::string NotificationLocale() const;
++};
++
++// Voices Pico ships: code and display name.
++std::vector<std::pair<QString, QString>> const & PicoVoices();
++
++class Speaker
++{
++public:
++  static Speaker & Instance();
++
++  // Queues a text; it is spoken after the texts before it.
++  void Say(QString const & text);
++  // Drops texts that were not spoken yet.
++  void Clear();
++
++  Speaker(Speaker const &) = delete;
++  Speaker & operator=(Speaker const &) = delete;
++
++private:
++  Speaker();
++  ~Speaker();
++  void Run();
++
++  std::thread m_thread;
++  std::mutex m_mutex;
++  std::condition_variable m_cv;
++  struct Item
++  {
++    QString text;
++    QString voice;
++    int volume;
++  };
++  std::deque<Item> m_queue;
++  bool m_stop = false;
++};
++
++void ShowVoiceSettings(QWidget * parent);
++}  // namespace mobile
++}  // namespace qt

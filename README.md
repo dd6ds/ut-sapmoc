@@ -86,6 +86,17 @@ bildschirmfüllend unter runden, schwebenden Bedienelementen:
 - Vollbild-Dialoge (Karten herunterladen, Lesezeichen, Einstellungen …) bekommen eine Kopfzeile mit
   rundem Zurück-Knopf und Titel; Listen scrollen mit dem Finger
 
+**Navigation mit Sprachansagen:** Nach „Start“ zeigt die Routenkarte das nächste Manöver
+(Pfeil, Entfernung, Straße) sowie Restzeit, Ankunftszeit und Reststrecke. Die Abbiegehinweise
+erzeugt CoMaps; gesprochen werden sie offline von **Pico TTS** (die Stimmen liegen im Paket unter
+`data/ut-pico/`, Ausgabe über das PulseAudio des Handys). Unter ⋯ → **Sprachansagen** lassen
+sich die Ansagen ein-/ausschalten, die Stimme wählen (Deutsch, English UK/US, Français, Español,
+Italiano oder wie die App-Sprache), die Lautstärke relativ zur Systemlautstärke einstellen
+(30–200 %), Straßennamen an-/abwählen und eine Probe anhören.
+
+Routen, die CoMaps mit Warnung baut („mit weiteren Karten besser“), werden normal angezeigt,
+samt Hinweis, welche Karten noch helfen würden; bei „Karten fehlen“ werden diese genannt.
+
 Solange die App im Vordergrund ist, dimmt und sperrt das Display nicht (repowerd
 `keepDisplayOn`, AppArmor-Gruppe `keep-display-on`); im Hintergrund gilt wieder das normale Verhalten.
 

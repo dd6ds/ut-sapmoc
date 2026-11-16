@@ -48,6 +48,15 @@ for f in "$SRC"/iphone/Maps/LocalizedStrings/*.lproj/LocalizableTypes.strings; d
     cp "$f" "$CLICK_DIR/data/ut-types/$lang.strings"
 done
 
+# Pico voices for the spoken turn instructions (libttspico-data).
+PICO_LANG="${PICO_LANG_DIR:-/usr/share/pico/lang}"
+if [ -d "$PICO_LANG" ]; then
+    mkdir -p "$CLICK_DIR/data/ut-pico"
+    cp -L "$PICO_LANG"/*.bin "$CLICK_DIR/data/ut-pico/"
+else
+    echo "[ut-sapmoc] WARNING: $PICO_LANG missing - no voice instructions." >&2
+fi
+
 # --- Qt plugins --------------------------------------------------------------
 PLUGINS=""
 for d in /usr/lib/aarch64-linux-gnu/qt6/plugins /usr/lib/qt6/plugins; do
@@ -87,7 +96,8 @@ is_system_lib() {
         libEGL*|libGL*|libGLES*|libGLX*|libGLdispatch*|libOpenGL*|libgbm*|libdrm*|\
         libwayland-*|libhybris*|libandroid*|\
         libdbus-1.so*|libsystemd.so*|libudev.so*|\
-        libssl.so*|libcrypto.so*)
+        libssl.so*|libcrypto.so*|libpulse*)
+            # PulseAudio: the phone's, it must match the phone's sound server.
             # OpenSSL: the phone's. Qt's TLS backend works with any OpenSSL 3.x,
             # and the phone's own libraries (e.g. libcurl used by
             # lomiri-location-service) need the phone's newer one; a bundled

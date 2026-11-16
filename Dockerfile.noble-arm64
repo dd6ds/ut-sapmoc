@@ -46,6 +46,7 @@ RUN curl -fsSL http://repo.ubports.com/keyring.gpg -o /usr/share/keyrings/ubport
          > /etc/apt/sources.list.d/ubports.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends liblomiri-location-service-dev libdbus-cpp-dev \
+       libttspico-dev libttspico-data libpulse-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Maliit input context plugin for Qt6 (on-screen keyboard on Ubuntu Touch).
