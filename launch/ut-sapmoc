@@ -11,7 +11,12 @@ HERE="${BASH_SOURCE[0]%/*}"
 [ "$HERE" = "${BASH_SOURCE[0]}" ] && HERE="$PWD"
 
 export LD_LIBRARY_PATH="$HERE/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
+# Plugins: the phone's (Maliit keyboard, lomiri position source, ...) plus the
+# bundled xdg-shell integration, which the phone lacks.
+export QT_PLUGIN_PATH="$HERE/lib/plugins"
+# Wayland, not the session's "ubuntumirclient": that one scales Qt Widgets
+# windows wrongly (the window is drawn at a third of the screen).
+export QT_QPA_PLATFORM=wayland
 # Lomiri draws the window frame; Qt must not add its own decorations.
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 # libhybris loads the Android linker (q.so) at GL start; with the bundled libs

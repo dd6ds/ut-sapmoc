@@ -45,7 +45,9 @@ Frameworks nutzen: Qt 5.15 für 24.04 und **Qt 6.10 für 26.04** (geprüft von
 Deshalb wird ut-sapmoc in einem Ubuntu-26.04-Container gegen das Qt aus dem UBports-Repository
 gebaut (dieselbe Qt-6.10.2-Version wie auf dem Handy) und nutzt zur Laufzeit das Qt des Systems
 samt dessen Plugins: Wayland, Maliit-Bildschirmtastatur und die Standortquelle „lomiri“.
-Gebündelt werden nur Bibliotheken, die das Handy nicht hat (z. B. Qt6OpenGLWidgets, Pico TTS).
+Gebündelt werden nur Bibliotheken, die das Handy nicht hat (z. B. Qt6OpenGLWidgets, Pico TTS),
+und das Wayland-Plugin „xdg-shell“ (gleicher Qt-Build): Qt-Widgets-Fenster laufen über Wayland,
+weil das Standard-Plugin der Sitzung („ubuntumirclient“) sie falsch skaliert.
 
 ## Ubuntu-Touch-Anpassungen (patches/)
 

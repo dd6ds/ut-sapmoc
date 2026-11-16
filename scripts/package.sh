@@ -72,7 +72,7 @@ fi
 # lomiri position source): the OpenStore only accepts the Qt of the Ubuntu Touch
 # framework. Bundled are only the libraries the phone lacks, judged by the list
 # of libraries on a UT 26.04 phone (scripts/ut-26.04-arm64-libs.txt; refresh with
-#   adb shell "ls -1 /usr/lib/aarch64-linux-gnu /lib/aarch64-linux-gnu /usr/lib | grep '\.so' | sort -u").
+#   adb shell "find /usr/lib/aarch64-linux-gnu /lib/aarch64-linux-gnu /usr/lib -name '*.so*' -printf '%f\n' | sort -u").
 SYSTEM_LIBS="${UT_SYSTEM_LIBS:-scripts/ut-26.04-arm64-libs.txt}"
 declare -A ON_PHONE=()
 while read -r l; do [ -n "$l" ] && ON_PHONE[$l]=1; done < "$SYSTEM_LIBS"
@@ -96,8 +96,24 @@ copy_libs() {
         copy_libs "$lib"
     done
 }
+# Wayland shell integration "xdg-shell": not installed on the phone (package
+# libqt6wlshellintegration6, same Qt build as the phone's), but Qt Widgets need
+# the wayland platform there - the session's default "ubuntumirclient" draws
+# widget windows at the wrong scale.
+QT_PLUGINS=""
+for d in /usr/lib/aarch64-linux-gnu/qt6/plugins /usr/lib/x86_64-linux-gnu/qt6/plugins /usr/lib/qt6/plugins; do
+    [ -f "$d/wayland-shell-integration/libxdg-shell.so" ] && QT_PLUGINS="$d" && break
+done
+if [ -z "$QT_PLUGINS" ]; then
+    echo "[ut-sapmoc] ERROR: wayland-shell-integration/libxdg-shell.so not found (libqt6wlshellintegration6)." >&2
+    exit 1
+fi
+mkdir -p "$CLICK_DIR/lib/plugins/wayland-shell-integration"
+install -m 644 "$QT_PLUGINS/wayland-shell-integration/libxdg-shell.so" \
+    "$CLICK_DIR/lib/plugins/wayland-shell-integration/"
+
 echo "[ut-sapmoc] Bundling shared libraries the phone lacks ..."
-copy_libs "$CLICK_DIR/ut-sapmoc.bin"
+copy_libs "$CLICK_DIR/ut-sapmoc.bin" "$CLICK_DIR/lib/plugins/wayland-shell-integration/libxdg-shell.so"
 echo "[ut-sapmoc] Bundled $(ls "$CLICK_DIR/lib" | grep -c '\.so') libraries."
 
 # --- Build the click (clickable does this itself) -----------------------------

@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --allow-downgrades --no-install-recomme
         qt6-base-dev \
         qt6-positioning-dev \
         qt6-svg-dev \
+        libqt6wlshellintegration6 \
         qt6-translations-l10n \
         libfreetype-dev \
         libglvnd-dev \
