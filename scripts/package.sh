@@ -57,6 +57,15 @@ else
     echo "[ut-sapmoc] WARNING: $PICO_LANG missing - no voice instructions." >&2
 fi
 
+# Qt's own texts (OK/Cancel, file dialog ...) in the user's language.
+QT_TR="${QT_TRANSLATIONS_DIR:-/usr/share/qt6/translations}"
+if ls "$QT_TR"/qtbase_*.qm >/dev/null 2>&1; then
+    mkdir -p "$CLICK_DIR/data/ut-qt-translations"
+    cp -L "$QT_TR"/qtbase_*.qm "$CLICK_DIR/data/ut-qt-translations/"
+else
+    echo "[ut-sapmoc] WARNING: no Qt translations in $QT_TR." >&2
+fi
+
 # --- Qt plugins --------------------------------------------------------------
 PLUGINS=""
 for d in /usr/lib/aarch64-linux-gnu/qt6/plugins /usr/lib/qt6/plugins; do

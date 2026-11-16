@@ -1,8 +1,8 @@
 diff --git a/qt/CMakeLists.txt b/qt/CMakeLists.txt
-index 220ed5e..d937953 100644
+index 220ed5e..2da5901 100644
 --- a/qt/CMakeLists.txt
 +++ b/qt/CMakeLists.txt
-@@ -64,10 +64,21 @@ set(SRC
+@@ -64,10 +64,23 @@ set(SRC
    update_dialog.cpp
    update_dialog.hpp
    ut_fit_screen.cpp
@@ -14,6 +14,8 @@ index 220ed5e..d937953 100644
 +  ut_mobile_ui.hpp
 +  ut_test_hook.cpp
 +  ut_test_hook.hpp
++  ut_translate.cpp
++  ut_translate.hpp
 +  ut_voice.cpp
 +  ut_voice.hpp
  )
@@ -24,7 +26,7 @@ index 220ed5e..d937953 100644
  omim_add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${RES_SOURCES} ${SRC})
  
  set_target_properties(${PROJECT_NAME} PROPERTIES AUTOMOC ON)
-@@ -96,8 +107,15 @@ target_link_libraries(${PROJECT_NAME}
+@@ -96,8 +109,15 @@ target_link_libraries(${PROJECT_NAME}
  target_link_libraries(${PROJECT_NAME}
    PRIVATE
      gflags::gflags
@@ -434,10 +436,24 @@ index 1d4c24a..6295017 100644
    void SubmitFakeLocationPoint(m2::PointD const & pt);
    void SubmitRulerPoint(m2::PointD const & pt);
 diff --git a/qt/main.cpp b/qt/main.cpp
-index 0248426..e9ee2ec 100644
+index 0248426..6130ef3 100644
 --- a/qt/main.cpp
 +++ b/qt/main.cpp
-@@ -154,7 +154,7 @@ int main(int argc, char * argv[])
+@@ -1,6 +1,7 @@
+ #include "qt/html_processor.hpp"
+ #include "qt/info_dialog.hpp"
+ #include "qt/mainwindow.hpp"
++#include "qt/ut_translate.hpp"
+ #include "qt/screenshoter.hpp"
+ #include "qt/ut_integration.hpp"
+ 
+@@ -149,12 +150,13 @@ int main(int argc, char * argv[])
+     app.setDesktopFileName("app.comaps.comaps");
+   // ut-comaps: light/dark widgets, following the phone or the user's choice.
+   ut::Theme::Instance().ApplyToApplication();
++  qt::mobile::InstallTranslations();
+   platform.SetupMeasurementSystem();
+ 
  #ifdef BUILD_DESIGNER
    QApplication::setApplicationName("CoMaps Designer");
  #else
@@ -447,15 +463,16 @@ index 0248426..e9ee2ec 100644
  
  #ifdef DEBUG
 diff --git a/qt/mainwindow.cpp b/qt/mainwindow.cpp
-index 9aaf07c..0364f48 100644
+index 9aaf07c..98ae19d 100644
 --- a/qt/mainwindow.cpp
 +++ b/qt/mainwindow.cpp
-@@ -11,7 +11,13 @@
+@@ -11,7 +11,14 @@
  #include "qt/routing_settings_dialog.hpp"
  #include "qt/screenshoter.hpp"
  #include "qt/search_panel.hpp"
 +#include "qt/ut_mobile_ui.hpp"
 +#include "qt/ut_test_hook.hpp"
++#include "qt/ut_translate.hpp"
 +#include "qt/ut_voice.hpp"
  
 +#include "geometry/mercator.hpp"
@@ -464,7 +481,7 @@ index 9aaf07c..0364f48 100644
  #include "platform/platform.hpp"
  #include "platform/settings.hpp"
  
-@@ -34,6 +40,7 @@
+@@ -34,6 +41,7 @@
  #include "drape_frontend/debug_rect_renderer.hpp"
  #endif  // BUILD_DESIGNER
  
@@ -472,7 +489,7 @@ index 9aaf07c..0364f48 100644
  #include <QtGui/QCloseEvent>
  #include <QtWidgets/QDockWidget>
  #include <QtWidgets/QFileDialog>
-@@ -122,7 +129,9 @@ MainWindow::MainWindow(Framework & framework, std::unique_ptr<ScreenshotParams>
+@@ -122,7 +130,9 @@ MainWindow::MainWindow(Framework & framework, std::unique_ptr<ScreenshotParams>
    int const height = m_screenshotMode ? static_cast<int>(screenshotParams->m_height) : 0;
    m_pDrawWidget = new DrawWidget(framework, std::move(screenshotParams), this);
  
@@ -483,7 +500,7 @@ index 9aaf07c..0364f48 100644
  
    if (m_screenshotMode)
    {
-@@ -177,6 +186,8 @@ MainWindow::MainWindow(Framework & framework, std::unique_ptr<ScreenshotParams>
+@@ -177,6 +187,8 @@ MainWindow::MainWindow(Framework & framework, std::unique_ptr<ScreenshotParams>
    }
  #endif
  
@@ -492,7 +509,7 @@ index 9aaf07c..0364f48 100644
    // Always show on full screen.
    showMaximized();
  
-@@ -245,6 +256,9 @@ bool MainWindow::nativeEvent(QByteArray const & eventType, void * message, qintp
+@@ -245,6 +257,9 @@ bool MainWindow::nativeEvent(QByteArray const & eventType, void * message, qintp
  
  void MainWindow::LocationStateModeChanged(location::EMyPositionMode mode)
  {
@@ -502,7 +519,7 @@ index 9aaf07c..0364f48 100644
    if (mode == location::PendingPosition)
    {
      m_locationService->Start();
-@@ -465,6 +479,7 @@ void MainWindow::CreateNavigationBar()
+@@ -465,6 +480,7 @@ void MainWindow::CreateNavigationBar()
      pToolBar->setVisible(false);
  
    addToolBar(Qt::RightToolBarArea, pToolBar);
@@ -510,7 +527,7 @@ index 9aaf07c..0364f48 100644
  }
  
  Framework & MainWindow::GetFramework() const
-@@ -540,10 +555,17 @@ void MainWindow::CreateCountryStatusControls()
+@@ -540,10 +556,17 @@ void MainWindow::CreateCountryStatusControls()
      }
    };
  
@@ -530,7 +547,7 @@ index 9aaf07c..0364f48 100644
    {
      // Storage also calls notifications for parents, but we are interested in leafs only.
      if (GetFramework().GetStorage().IsLeaf(countryId))
-@@ -553,6 +575,14 @@ void MainWindow::CreateCountryStatusControls()
+@@ -553,6 +576,14 @@ void MainWindow::CreateCountryStatusControls()
      std::stringstream str;
      str << "Downloading (" << countryId << ") " << progress.m_bytesDownloaded * 100 / progress.m_bytesTotal << "% (click to cancel)";
      m_cancelDownloadButton->setText(str.str().c_str());
@@ -545,7 +562,7 @@ index 9aaf07c..0364f48 100644
    });
  }
  
-@@ -572,6 +602,8 @@ void MainWindow::OnLocationError(location::TLocationError errorCode)
+@@ -572,6 +603,8 @@ void MainWindow::OnLocationError(location::TLocationError errorCode)
    {
      if (m_pDrawWidget && m_pMyPositionAction)
        m_pMyPositionAction->setEnabled(false);
@@ -554,7 +571,7 @@ index 9aaf07c..0364f48 100644
      break;
    }
  
-@@ -584,7 +616,10 @@ void MainWindow::OnLocationError(location::TLocationError errorCode)
+@@ -584,7 +617,10 @@ void MainWindow::OnLocationError(location::TLocationError errorCode)
  
  void MainWindow::OnLocationUpdated(location::GpsInfo const & info)
  {
@@ -565,7 +582,7 @@ index 9aaf07c..0364f48 100644
  }
  
  void MainWindow::OnMyPosition()
-@@ -915,6 +950,8 @@ void MainWindow::SetMapMode(MapMode const mapMode)
+@@ -915,6 +951,8 @@ void MainWindow::SetMapMode(MapMode const mapMode)
    else
      m_publicTransportMapMode->setMainIcon(QIcon(":/navig64/mode_public-transport.png"));
  #endif  // BUILD_DESIGNER
@@ -574,7 +591,7 @@ index 9aaf07c..0364f48 100644
  }
  
  void MainWindow::OnMapModeChange(MapMode const mapMode)
-@@ -922,6 +959,130 @@ void MainWindow::OnMapModeChange(MapMode const mapMode)
+@@ -922,6 +960,138 @@ void MainWindow::OnMapModeChange(MapMode const mapMode)
    SetMapMode(mapMode);
  }
  
@@ -599,7 +616,15 @@ index 9aaf07c..0364f48 100644
 +#endif
 +  a.showBookmarks = [this] { OnBookmarksAction(); };
 +  a.showPreferences = [this] { OnPreferences(); };
-+  a.showRoutingSettings = [this] { OnRoutingSettings(); };
++  a.showRoutingSettings = [this]
++  {
++    // Roads to avoid (like the iPhone app); a shown route is rebuilt with them.
++    if (!mobile::ShowRoutingOptions(this))
++      return;
++    auto & routingManager = m_pDrawWidget->GetFramework().GetRoutingManager();
++    if (routingManager.GetRoutePoints().size() >= 2 && !routingManager.IsRoutingFollowing())
++      routingManager.BuildRoute();
++  };
 +  a.showVoiceSettings = [this] { mobile::ShowVoiceSettings(this); };
 +  a.showAbout = [this] { OnAbout(); };
 +  a.osmLogin = [this] { OnLoginMenuItem(); };
@@ -705,7 +730,7 @@ index 9aaf07c..0364f48 100644
  void MainWindow::OnWalkingMapModeOptionChange(int8_t const index)
  {
    // Do nothing (yet)
-@@ -974,14 +1135,112 @@ void MainWindow::OnRoutePointSelected(RouteMarkType type)
+@@ -974,14 +1144,112 @@ void MainWindow::OnRoutePointSelected(RouteMarkType type)
  
  void MainWindow::OnFollowRoute()
  {
@@ -4113,6 +4138,434 @@ index 0000000..7391cd3
 +void RegisterCommand(QString const & name, Command command);
 +bool Enabled();
 +}  // namespace ut_test
+diff --git a/qt/ut_translate.cpp b/qt/ut_translate.cpp
+new file mode 100644
+index 0000000..74b82a6
+--- /dev/null
++++ b/qt/ut_translate.cpp
+@@ -0,0 +1,393 @@
++#include "qt/ut_translate.hpp"
++
++#include "qt/ut_mobile_ui.hpp"
++#include "qt/ut_voice.hpp"
++
++#include "routing/routing_options.hpp"
++#include "routing/vehicle_mask.hpp"
++
++#include "platform/platform.hpp"
++#include "platform/preferred_languages.hpp"
++
++#include <QtCore/QCoreApplication>
++#include <QtCore/QDir>
++#include <QtCore/QEvent>
++#include <QtCore/QHash>
++#include <QtCore/QLibraryInfo>
++#include <QtCore/QTranslator>
++#include <QtWidgets/QAbstractButton>
++#include <QtWidgets/QApplication>
++#include <QtWidgets/QCheckBox>
++#include <QtWidgets/QComboBox>
++#include <QtWidgets/QDialog>
++#include <QtWidgets/QGroupBox>
++#include <QtWidgets/QLabel>
++#include <QtWidgets/QLineEdit>
++#include <QtWidgets/QPushButton>
++#include <QtWidgets/QScrollArea>
++#include <QtWidgets/QTreeWidget>
++#include <QtWidgets/QVBoxLayout>
++
++#include <string>
++#include <tuple>
++
++namespace qt
++{
++namespace mobile
++{
++namespace
++{
++using Dict = QHash<QString, QString>;
++
++// English text of the desktop frontend -> German.
++Dict const & German()
++{
++  static Dict const dict = []
++  {
++    Dict d;
++    auto const add = [&d](char const * en, char const * de) { d.insert(QString::fromUtf8(en), QString::fromUtf8(de)); };
++    // General
++    add("Close", "Schließen");
++    add("Cancel", "Abbrechen");
++    add("Save", "Speichern");
++    add("Delete", "Löschen");
++    add("Yes", "Ja");
++    add("No", "Nein");
++    add("Error", "Fehler");
++    add("Warning", "Warnung");
++    add("Download", "Herunterladen");
++    add("Download Maps", "Karten herunterladen");
++    add("Retry downloading", "Erneut herunterladen");
++    add("Looking for position...", "Standort wird gesucht …");
++    add("Upload Edits", "Änderungen hochladen");
++    add("Welcome to ", "Willkommen bei ");
++    add("Search", "Suche");
++    add("Navigation", "Navigation");
++    // Preferences
++    add("Preferences", "Einstellungen");
++    add("System of measurement", "Maßeinheiten");
++    add("Metric", "Metrisch");
++    add("Imperial (foot)", "Imperial (Fuß, Meilen)");
++    add("Text size on map", "Textgröße auf der Karte");
++    add("Transliterate to Latin", "In lateinische Schrift umschreiben");
++    add("Developer Mode", "Entwicklermodus");
++    add("Map Language", "Kartensprache");
++    add("Auto", "Automatisch");
++    add("Local Language", "Landessprache");
++    add("Alternative Map Language", "Alternative Kartensprache");
++    add("Don't use alternatives", "Keine Alternativen");
++    add("Use in system order", "In Systemreihenfolge verwenden");
++    add("Prefer and only use where native", "Bevorzugen, nur wo einheimisch");
++    add("Show names of favorites on map", "Namen der Lesezeichen auf der Karte zeigen");
++    add("Appearance", "Erscheinungsbild");
++    add("Like the phone", "Wie das Handy");
++    add("Light", "Hell");
++    add("Dark", "Dunkel");
++    add("Language (after restart)", "Sprache (nach Neustart)");
++    add("The language changes when CoMaps is started again.",
++        "Die Sprache ändert sich beim nächsten Start von ut-sapmoc.");
++    // Bookmarks
++    add("Bookmarks and tracks", "Lesezeichen und Tracks");
++    add("Bookmarks successfully exported.", "Lesezeichen erfolgreich exportiert.");
++    add("Categories", "Kategorien");
++    add("Could not delete the last category.", "Die letzte Kategorie kann nicht gelöscht werden.");
++    add("Could not export bookmarks: ", "Lesezeichen konnten nicht exportiert werden: ");
++    add("Export KMZ", "Als KMZ exportieren");
++    add("Export KMZ...", "Als KMZ exportieren …");
++    add("Import KML, KMZ, GPX", "KML, KMZ, GPX importieren");
++    add("Loading in progress...", "Wird geladen …");
++    add("No name", "Ohne Namen");
++    add("Open KML, KMZ, GPX...", "KML, KMZ, GPX öffnen …");
++    add("Select category, bookmark or track to delete.",
++        "Wähle die Kategorie, das Lesezeichen oder den Track, der gelöscht werden soll.");
++    add("Select one of the bookmark categories to export.", "Wähle eine Lesezeichen-Kategorie zum Exportieren.");
++    add("Selected item is not a bookmark category.", "Der gewählte Eintrag ist keine Lesezeichen-Kategorie.");
++    add("Show on the map", "Auf der Karte zeigen");
++    // About
++    add("About", "Über");
++    add("Version: ", "Version: ");
++    add("Data: ", "Kartendaten: ");
++    // OpenStreetMap login
++    add("OpenStreetMap Login", "OpenStreetMap-Anmeldung");
++    add("Login", "Anmelden");
++    add("Logout", "Abmelden");
++    add("Username/email:", "Benutzername/E-Mail:");
++    add("Password:", "Passwort:");
++    add("Please enter Login", "Bitte den Benutzernamen eingeben");
++    add("Please enter Password", "Bitte das Passwort eingeben");
++    add("Auth failed: invalid login or password",
++        "Anmeldung fehlgeschlagen: Benutzername oder Passwort falsch");
++    add("Auth failed: ", "Anmeldung fehlgeschlagen: ");
++    // Place editor
++    add("OSM Editor", "Ort bearbeiten");
++    add("Latitude/Longitude:", "Breite/Länge:");
++    add("Type:", "Typ:");
++    add("Name:", "Name:");
++    add("Delete POI", "Ort löschen");
++    add("addr:street", "Straße");
++    add("addr:housenumber", "Hausnummer");
++    add("addr:postcode", "Postleitzahl");
++    add("internet_access", "Internetzugang");
++    add("phone", "Telefon");
++    add("website", "Website");
++    add("email", "E-Mail");
++    add("opening_hours", "Öffnungszeiten");
++    add("operator", "Betreiber");
++    add("cuisine", "Küche");
++    add("level", "Etage");
++    add("ele", "Höhe");
++    add("wikipedia", "Wikipedia");
++    add("stars", "Sterne");
++    add("flats", "Wohnungen");
++    add("capacity", "Kapazität");
++    add("drive_through", "Drive-in");
++    add("description", "Beschreibung");
++    // Place page (desktop dialog)
++    add("Route From", "Route von");
++    add("Route To", "Route nach");
++    add("Add Stop", "Zwischenziel");
++    add("Edit Place", "Ort bearbeiten");
++    add("Opening hours", "Öffnungszeiten");
++    add("Phone", "Telefon");
++    add("Website", "Website");
++    add("Email", "E-Mail");
++    add("Operator", "Betreiber");
++    add("Cuisine", "Küche");
++    add("Level", "Etage");
++    add("Coordinates", "Koordinaten");
++    add("Capacity", "Kapazität");
++    add("Bookmark", "Lesezeichen");
++    add("More...", "Mehr …");
++    add("Wi-Fi", "WLAN");
++    add("ATM", "Geldautomat");
++    add("Charging sockets", "Ladeanschlüsse");
++    add("Second-hand", "Gebraucht");
++    add("Place Page", "Ort");
++    return d;
++  }();
++  return dict;
++}
++
++Dict const * g_dict = nullptr;
++
++// Exact text, else a known prefix ("Version: 1.2" -> "Version: 1.2").
++bool Translate(QString & text)
++{
++  if (!g_dict || text.isEmpty())
++    return false;
++  QString plain = text;
++  plain.remove('&');
++  auto const it = g_dict->constFind(plain);
++  if (it != g_dict->constEnd())
++  {
++    text = it.value();
++    return true;
++  }
++  for (auto p = g_dict->constBegin(); p != g_dict->constEnd(); ++p)
++  {
++    if (p.key().endsWith(' ') && plain.startsWith(p.key()))
++    {
++      text = p.value() + plain.mid(p.key().size());
++      return true;
++    }
++  }
++  return false;
++}
++
++class DictTranslator : public QTranslator
++{
++public:
++  using QTranslator::QTranslator;
++  bool isEmpty() const override { return false; }
++  QString translate(char const *, char const * source, char const *, int) const override
++  {
++    QString text = QString::fromUtf8(source);
++    return Translate(text) ? text : QString();
++  }
++};
++
++void TranslateTree(QWidget * root)
++{
++  QString text = root->windowTitle();
++  if (Translate(text))
++    root->setWindowTitle(text);
++  for (auto * w : root->findChildren<QWidget *>())
++  {
++    if (auto * l = qobject_cast<QLabel *>(w))
++    {
++      text = l->text();
++      if (Translate(text))
++        l->setText(text);
++    }
++    else if (auto * b = qobject_cast<QAbstractButton *>(w))
++    {
++      text = b->text();
++      if (Translate(text))
++        b->setText(text);
++    }
++    else if (auto * g = qobject_cast<QGroupBox *>(w))
++    {
++      text = g->title();
++      if (Translate(text))
++        g->setTitle(text);
++    }
++    else if (auto * c = qobject_cast<QComboBox *>(w))
++    {
++      // Only the items in the dictionary; the code reads indexes, not texts.
++      for (int i = 0; i < c->count(); ++i)
++      {
++        text = c->itemText(i);
++        if (Translate(text))
++          c->setItemText(i, text);
++      }
++    }
++    else if (auto * e = qobject_cast<QLineEdit *>(w))
++    {
++      text = e->placeholderText();
++      if (Translate(text))
++        e->setPlaceholderText(text);
++    }
++    else if (auto * t = qobject_cast<QTreeWidget *>(w))
++    {
++      if (auto * h = t->headerItem())
++      {
++        for (int i = 0; i < h->columnCount(); ++i)
++        {
++          text = h->text(i);
++          if (Translate(text))
++            h->setText(i, text);
++        }
++      }
++    }
++  }
++}
++
++// Translates the plain texts of every window (dialog, message box) when shown.
++class DialogTranslator : public QObject
++{
++public:
++  using QObject::QObject;
++
++protected:
++  bool eventFilter(QObject * obj, QEvent * ev) override
++  {
++    if (ev->type() == QEvent::Show && obj->isWidgetType())
++    {
++      auto * w = static_cast<QWidget *>(obj);
++      if (w->isWindow())
++        TranslateTree(w);
++    }
++    return QObject::eventFilter(obj, ev);
++  }
++};
++}  // namespace
++
++void InstallTranslations()
++{
++  std::string const lang = languages::GetCurrentNorm();
++  std::string const code = lang.substr(0, 2);
++  if (code.empty() || code == "en")
++    return;
++
++  // Qt's own texts: standard buttons, file dialog, text field menus.
++  auto * qtTranslator = new QTranslator(qApp);
++  QString const bundled = QString::fromStdString(GetPlatform().ResourcesDir() + "ut-qt-translations");
++  QString const name = "qtbase_" + QString::fromStdString(code);
++  if (qtTranslator->load(name, bundled) ||
++      qtTranslator->load(name, QLibraryInfo::path(QLibraryInfo::TranslationsPath)))
++    QCoreApplication::installTranslator(qtTranslator);
++  else
++    delete qtTranslator;
++
++  if (code != "de")
++    return;
++  g_dict = &German();
++  QCoreApplication::installTranslator(new DictTranslator(qApp));
++  qApp->installEventFilter(new DialogTranslator(qApp));
++}
++
++// --- Routing options -----------------------------------------------------------------
++
++bool ShowRoutingOptions(QWidget * parent)
++{
++  using routing::RoutingOptions;
++  using routing::VehicleType;
++  Style const & st = CurrentStyle();
++
++  RoutingOptions car = RoutingOptions::LoadOptionsFromSettings(VehicleType::Car);
++  RoutingOptions bike = RoutingOptions::LoadOptionsFromSettings(VehicleType::Bicycle);
++  RoutingOptions walk = RoutingOptions::LoadOptionsFromSettings(VehicleType::Pedestrian);
++  auto const before = std::make_tuple(car.GetOptions(), bike.GetOptions(), walk.GetOptions());
++
++  QDialog dlg(parent);
++  dlg.setObjectName("utRoutingOptions");
++  dlg.setWindowTitle(Tr("Routing options", "Routenoptionen"));
++  auto * outer = new QVBoxLayout(&dlg);
++  outer->setContentsMargins(16, 0, 16, 16);
++  auto * scroll = new QScrollArea(&dlg);
++  scroll->setWidgetResizable(true);
++  scroll->setFrameShape(QFrame::NoFrame);
++  auto * content = new QWidget(scroll);
++  auto * v = new QVBoxLayout(content);
++  v->setContentsMargins(0, 8, 0, 8);
++  v->setSpacing(10);
++  scroll->setWidget(content);
++  outer->addWidget(scroll, 1);
++
++  auto const heading = [&](QString const & text)
++  {
++    auto * l = new QLabel(text, content);
++    l->setStyleSheet(QString("color: %1; font-size: 14px; font-weight: 600; padding-top: 10px;")
++                         .arg(st.secondary.name()));
++    v->addWidget(l);
++  };
++  auto const option = [&](RoutingOptions & opts, RoutingOptions::Option o, QString const & text, char const * name)
++  {
++    auto * c = new QCheckBox(text, content);
++    c->setObjectName(name);
++    c->setChecked(opts.Has(o));
++    QObject::connect(c, &QCheckBox::toggled, &dlg, [&opts, o](bool on)
++    {
++      if (on)
++        opts.Add(o);
++      else
++        opts.Remove(o);
++    });
++    v->addWidget(c);
++  };
++
++  heading(Tr("AVOID BY CAR", "MIT DEM AUTO VERMEIDEN"));
++  option(car, RoutingOptions::Toll, Tr("Toll roads", "Mautstraßen"), "utAvoidToll");
++  option(car, RoutingOptions::Motorway, Tr("Motorways", "Autobahnen"), "utAvoidMotorway");
++  option(car, RoutingOptions::Ferry, Tr("Ferries", "Fähren"), "utAvoidFerryCar");
++  option(car, RoutingOptions::Dirty, Tr("Unpaved roads", "Unbefestigte Straßen"), "utAvoidDirtyCar");
++
++  heading(Tr("AVOID BY BIKE", "MIT DEM FAHRRAD VERMEIDEN"));
++  option(bike, RoutingOptions::Ferry, Tr("Ferries", "Fähren"), "utAvoidFerryBike");
++  option(bike, RoutingOptions::Dirty, Tr("Unpaved paths", "Unbefestigte Wege"), "utAvoidDirtyBike");
++  option(bike, RoutingOptions::Steps, Tr("Steps", "Treppen"), "utAvoidStepsBike");
++
++  heading(Tr("AVOID ON FOOT", "ZU FUSS VERMEIDEN"));
++  option(walk, RoutingOptions::Ferry, Tr("Ferries", "Fähren"), "utAvoidFerryWalk");
++  option(walk, RoutingOptions::Dirty, Tr("Unpaved paths", "Unbefestigte Wege"), "utAvoidDirtyWalk");
++  option(walk, RoutingOptions::Steps, Tr("Steps", "Treppen"), "utAvoidStepsWalk");
++
++  heading(Tr("NAVIGATION", "NAVIGATION"));
++  auto * voice = new QPushButton(Tr("Voice instructions …", "Sprachansagen …"), content);
++  voice->setObjectName("utRoutingVoice");
++  QObject::connect(voice, &QPushButton::clicked, &dlg, [&dlg] { ShowVoiceSettings(&dlg); });
++  v->addWidget(voice);
++  v->addStretch(1);
++
++  auto * close = new QPushButton(Tr("Close", "Schließen"), &dlg);
++  QObject::connect(close, &QPushButton::clicked, &dlg, &QDialog::accept);
++  outer->addWidget(close);
++  dlg.exec();
++
++  RoutingOptions::SaveOptionsToSettings(car);
++  RoutingOptions::SaveOptionsToSettings(bike);
++  RoutingOptions::SaveOptionsToSettings(walk);
++  return before != std::make_tuple(car.GetOptions(), bike.GetOptions(), walk.GetOptions());
++}
++}  // namespace mobile
++}  // namespace qt
+diff --git a/qt/ut_translate.hpp b/qt/ut_translate.hpp
+new file mode 100644
+index 0000000..12d2511
+--- /dev/null
++++ b/qt/ut_translate.hpp
+@@ -0,0 +1,23 @@
++#pragma once
++
++// ut-comaps: German texts for the parts of the CoMaps desktop frontend that are
++// still shown on the phone (preferences, bookmarks, OSM login, editor, ...).
++// The desktop frontend has no translations of its own: tr() strings go through
++// a dictionary translator, plain strings in dialogs are replaced when a dialog
++// is shown, and Qt's own texts (OK, Cancel, file dialog) come from qtbase_*.qm.
++
++class QWidget;
++
++namespace qt
++{
++namespace mobile
++{
++// Installs the translators for the user interface language (does nothing for
++// English). Call once after the QApplication exists.
++void InstallTranslations();
++
++// Settings page "Routing options": roads to avoid, link to the voice settings.
++// Returns true if an option changed (the route should be rebuilt).
++bool ShowRoutingOptions(QWidget * parent);
++}  // namespace mobile
++}  // namespace qt
 diff --git a/qt/ut_voice.cpp b/qt/ut_voice.cpp
 new file mode 100644
 index 0000000..ff82dc3
