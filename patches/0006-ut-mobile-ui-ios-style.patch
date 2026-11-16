@@ -1711,10 +1711,10 @@ index 0000000..0d61835
 +Q_COREAPP_STARTUP_FUNCTION(UtComapsInstallKeepDisplayOn)
 diff --git a/qt/ut_mobile_ui.cpp b/qt/ut_mobile_ui.cpp
 new file mode 100644
-index 0000000..2d666e4
+index 0000000..fc8b083
 --- /dev/null
 +++ b/qt/ut_mobile_ui.cpp
-@@ -0,0 +1,1776 @@
+@@ -0,0 +1,1797 @@
 +#include "qt/ut_mobile_ui.hpp"
 +
 +#include "qt/draw_widget.hpp"
@@ -2817,14 +2817,31 @@ index 0000000..2d666e4
 +{
 +  m_menuCard = new Card(this);
 +  m_menuCard->setObjectName("utMenuCard");
-+  auto * v = new QVBoxLayout(m_menuCard);
-+  v->setContentsMargins(4, 8, 4, 8);
++  // The rows scroll when the card is higher than the screen (landscape).
++  auto * outer = new QVBoxLayout(m_menuCard);
++  outer->setContentsMargins(0, 8, 0, 8);
++  auto * scroll = new QScrollArea(m_menuCard);
++  scroll->setObjectName("utMenuScroll");
++  scroll->setFrameShape(QFrame::NoFrame);
++  scroll->setWidgetResizable(true);
++  scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
++  scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
++  scroll->setStyleSheet("QScrollArea#utMenuScroll, QWidget#utMenuList { background: transparent; }");
++  scroll->viewport()->setAutoFillBackground(false);
++  auto * list = new QWidget(scroll);
++  list->setObjectName("utMenuList");
++  list->setAutoFillBackground(false);
++  auto * v = new QVBoxLayout(list);
++  v->setContentsMargins(4, 0, 4, 0);
 +  v->setSpacing(0);
++  scroll->setWidget(list);
++  outer->addWidget(scroll);
++  EnableFingerScrolling(scroll->viewport());
 +
-+  auto const add = [this, v](char const * objectName, QString const & icon, QString const & text,
-+                             std::function<void()> const & fn)
++  auto const add = [this, v, list](char const * objectName, QString const & icon, QString const & text,
++                                   std::function<void()> const & fn)
 +  {
-+    auto * row = new RowButton(icon, text, m_menuCard);
++    auto * row = new RowButton(icon, text, list);
 +    row->setObjectName(objectName);
 +    connect(row, &QAbstractButton::clicked, this, [this, fn]
 +    {
@@ -2846,7 +2863,7 @@ index 0000000..2d666e4
 +      [this] { if (m_actions.showRoutingSettings) m_actions.showRoutingSettings(); });
 +  add("utMenuVoice", "speaker", Tr("Voice instructions", "Sprachansagen"),
 +      [this] { if (m_actions.showVoiceSettings) m_actions.showVoiceSettings(); });
-+  m_rulerRow = new RowButton("ruler", Tr("Ruler", "Lineal"), m_menuCard);
++  m_rulerRow = new RowButton("ruler", Tr("Ruler", "Lineal"), list);
 +  m_rulerRow->setObjectName("utMenuRuler");
 +  m_rulerRow->setCheckable(true);
 +  connect(m_rulerRow, &QAbstractButton::toggled, this, [this](bool on)
@@ -3418,7 +3435,11 @@ index 0000000..2d666e4
 +
 +  int const cardWidth = std::min(330, w - 2 * kMargin);
 +  m_menuCard->setFixedWidth(cardWidth);
-+  m_menuCard->adjustSize();
++  if (auto * list = m_menuCard->findChild<QWidget *>("utMenuList"))
++  {
++    int const natural = list->sizeHint().height() + 16;
++    m_menuCard->setFixedHeight(std::max(120, std::min(natural, h - (kTop + kButton + 8) - kMargin)));
++  }
 +  m_menuCard->move(kMargin, kTop + kButton + 8);
 +  int const layersWidth = std::min(270, w - 2 * kMargin);
 +  m_layersCard->setFixedWidth(layersWidth);
@@ -4140,10 +4161,10 @@ index 0000000..7391cd3
 +}  // namespace ut_test
 diff --git a/qt/ut_translate.cpp b/qt/ut_translate.cpp
 new file mode 100644
-index 0000000..74b82a6
+index 0000000..d52f32c
 --- /dev/null
 +++ b/qt/ut_translate.cpp
-@@ -0,0 +1,393 @@
+@@ -0,0 +1,396 @@
 +#include "qt/ut_translate.hpp"
 +
 +#include "qt/ut_mobile_ui.hpp"
@@ -4473,6 +4494,7 @@ index 0000000..74b82a6
 +  auto * scroll = new QScrollArea(&dlg);
 +  scroll->setWidgetResizable(true);
 +  scroll->setFrameShape(QFrame::NoFrame);
++  scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 +  auto * content = new QWidget(scroll);
 +  auto * v = new QVBoxLayout(content);
 +  v->setContentsMargins(0, 8, 0, 8);
@@ -4528,6 +4550,8 @@ index 0000000..74b82a6
 +  auto * close = new QPushButton(Tr("Close", "Schließen"), &dlg);
 +  QObject::connect(close, &QPushButton::clicked, &dlg, &QDialog::accept);
 +  outer->addWidget(close);
++  // A full screen page (small dialogs are not maximized automatically).
++  dlg.setWindowState(Qt::WindowMaximized);
 +  dlg.exec();
 +
 +  RoutingOptions::SaveOptionsToSettings(car);
@@ -4568,10 +4592,10 @@ index 0000000..12d2511
 +}  // namespace qt
 diff --git a/qt/ut_voice.cpp b/qt/ut_voice.cpp
 new file mode 100644
-index 0000000..ff82dc3
+index 0000000..864035f
 --- /dev/null
 +++ b/qt/ut_voice.cpp
-@@ -0,0 +1,473 @@
+@@ -0,0 +1,476 @@
 +#include "qt/ut_voice.hpp"
 +
 +#include "qt/ut_mobile_ui.hpp"
@@ -4928,6 +4952,7 @@ index 0000000..ff82dc3
 +  auto * scroll = new QScrollArea(&dlg);
 +  scroll->setWidgetResizable(true);
 +  scroll->setFrameShape(QFrame::NoFrame);
++  scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 +  auto * content = new QWidget(scroll);
 +  auto * v = new QVBoxLayout(content);
 +  v->setContentsMargins(0, 8, 0, 8);
@@ -4943,7 +4968,7 @@ index 0000000..ff82dc3
 +    v->addWidget(l);
 +  };
 +
-+  auto * enabled = new QCheckBox(Tr("Speak turn instructions", "Abbiegehinweise ansagen"), content);
++  auto * enabled = new QCheckBox(Tr("Voice instructions", "Ansagen"), content);
 +  enabled->setObjectName("utVoiceEnabled");
 +  enabled->setChecked(s.enabled);
 +  v->addWidget(enabled);
@@ -4958,7 +4983,7 @@ index 0000000..ff82dc3
 +    if (code == automatic.EffectiveVoice())
 +      autoName = name;
 +  }
-+  auto * autoButton = new QRadioButton(Tr("Like the app language (%1)", "Wie die App-Sprache (%1)").arg(autoName),
++  auto * autoButton = new QRadioButton(Tr("Automatic (%1)", "Automatisch (%1)").arg(autoName),
 +                                       content);
 +  autoButton->setProperty("voice", QString());
 +  group->addButton(autoButton);
@@ -5041,6 +5066,8 @@ index 0000000..ff82dc3
 +    save();
 +    dlg.accept();
 +  });
++  // A full screen page (small dialogs are not maximized automatically).
++  dlg.setWindowState(Qt::WindowMaximized);
 +  dlg.exec();
 +}
 +}  // namespace mobile
