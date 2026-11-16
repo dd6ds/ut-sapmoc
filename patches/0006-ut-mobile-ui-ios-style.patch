@@ -32,7 +32,7 @@ index 220ed5e..5f00d98 100644
  
  if (BUILD_DESIGNER)
 diff --git a/qt/draw_widget.cpp b/qt/draw_widget.cpp
-index 1bb44ea..9eb9e8d 100644
+index 1bb44ea..d47f4b5 100644
 --- a/qt/draw_widget.cpp
 +++ b/qt/draw_widget.cpp
 @@ -8,9 +8,12 @@
@@ -48,7 +48,7 @@ index 1bb44ea..9eb9e8d 100644
  #include "map/framework.hpp"
  
  #include "search/result.hpp"
-@@ -101,8 +104,18 @@ DrawWidget::DrawWidget(Framework & framework, std::unique_ptr<ScreenshotParams>
+@@ -101,16 +104,32 @@ DrawWidget::DrawWidget(Framework & framework, std::unique_ptr<ScreenshotParams>
  {
    setFocusPolicy(Qt::StrongFocus);
  
@@ -69,7 +69,23 @@ index 1bb44ea..9eb9e8d 100644
  
    auto & routingManager = m_framework.GetRoutingManager();
  
-@@ -669,6 +682,12 @@ void DrawWidget::ShowPlacePage()
+   routingManager.SetRouteBuildingListener(
+-      [&routingManager, this](routing::RouterResultCode code, storage::CountriesSet const &)
++      [&routingManager, this](routing::RouterResultCode code, storage::CountriesSet const & absent)
+   {
++    // ut-comaps: names of the maps the route still needs, for the hint text.
++    QStringList missing;
++    for (auto const & id : absent)
++      missing << QString::fromStdString(id).replace('_', ' ');
++    missing.sort();
+     // Queued: the label is touched on the GUI thread after the route is set.
+-    QMetaObject::invokeMethod(this, [this, code] { ShowRouteInfo(code); }, Qt::QueuedConnection);
++    QMetaObject::invokeMethod(this, [this, code, missing] { ShowRouteInfo(code, missing); },
++                              Qt::QueuedConnection);
+ 
+     auto & drapeApi = m_framework.GetDrapeApi();
+ 
+@@ -669,6 +688,12 @@ void DrawWidget::ShowPlacePage()
      address = m_framework.GetAddressAtPoint(info.GetMercator());
    }
  
@@ -82,7 +98,7 @@ index 1bb44ea..9eb9e8d 100644
    std::unique_ptr<QDialog> placePageDialog = nullptr;
    bool developerMode;
    if (settings::Get(settings::kDeveloperMode, developerMode) && developerMode)
-@@ -776,11 +795,11 @@ QString RouterName(routing::RouterType type)
+@@ -776,37 +801,56 @@ QString RouterName(routing::RouterType type)
  {
    switch (type)
    {
@@ -99,9 +115,10 @@ index 1bb44ea..9eb9e8d 100644
    default: return {};
    }
  }
-@@ -788,25 +807,17 @@ QString RouterName(routing::RouterType type)
+ }  // namespace
  
- void DrawWidget::ShowRouteInfo(routing::RouterResultCode code)
+-void DrawWidget::ShowRouteInfo(routing::RouterResultCode code)
++void DrawWidget::ShowRouteInfo(routing::RouterResultCode code, QStringList const & missing)
  {
 -  if (!m_routeInfo)
 -  {
@@ -120,17 +137,44 @@ index 1bb44ea..9eb9e8d 100644
 +  // primary: "35 min · 35 km", secondary: router and ascent (phone UI);
 +  // text: everything in one label (desktop).
 +  QString text, primary, secondary;
++  // ut-comaps: HasWarnings = a route was built, but it would be better with more
++  // maps; show it like a normal route plus a hint.
++  bool const warnings = code == routing::RouterResultCode::HasWarnings;
++  if (warnings)
++    code = routing::RouterResultCode::NoError;
++  QString const missingText = missing.join(", ");
    if (code != routing::RouterResultCode::NoError)
    {
      if (code == routing::RouterResultCode::Cancelled)
        return;
      text = tr("No route: %1").arg(QString::fromStdString(routing::DebugPrint(code)));
 +    primary = mobile::Tr("No route", "Keine Route");
-+    secondary = QString::fromStdString(routing::DebugPrint(code));
++    switch (code)
++    {
++    case routing::RouterResultCode::NeedMoreMaps:
++      secondary = mobile::Tr("Maps missing: ", "Fehlende Karten: ") + missingText;
++      break;
++    case routing::RouterResultCode::RouteFileNotExist:
++    case routing::RouterResultCode::FileTooOld:
++      secondary = mobile::Tr("Please update the maps ", "Bitte Karten aktualisieren ") + missingText;
++      break;
++    case routing::RouterResultCode::StartPointNotFound:
++      secondary = mobile::Tr("No road near the start", "Keine Straße am Startpunkt");
++      break;
++    case routing::RouterResultCode::EndPointNotFound:
++      secondary = mobile::Tr("No road near the destination", "Keine Straße am Ziel");
++      break;
++    case routing::RouterResultCode::NoCurrentPosition:
++      secondary = mobile::Tr("Own position unknown", "Eigener Standort unbekannt");
++      break;
++    default:
++      secondary = QString::fromStdString(routing::DebugPrint(code));
++    }
++    text += "\n" + secondary;
    }
    else
    {
-@@ -823,11 +834,14 @@ void DrawWidget::ShowRouteInfo(routing::RouterResultCode code)
+@@ -823,11 +867,14 @@ void DrawWidget::ShowRouteInfo(routing::RouterResultCode code)
        return;
      }
      auto const routerType = routing::GetLastUsedRouter();
@@ -147,7 +191,7 @@ index 1bb44ea..9eb9e8d 100644
  
      if (routerType == routing::RouterType::Pedestrian || routerType == routing::RouterType::Bicycle)
      {
-@@ -837,11 +851,30 @@ void DrawWidget::ShowRouteInfo(routing::RouterResultCode code)
+@@ -837,11 +884,36 @@ void DrawWidget::ShowRouteInfo(routing::RouterResultCode code)
          da.Simplify();
          uint32_t ascent = 0, descent = 0;
          da.CalculateAscentDescent(ascent, descent);
@@ -157,14 +201,20 @@ index 1bb44ea..9eb9e8d 100644
 +        secondary += (secondary.isEmpty() ? "" : "   ") + updown;
        }
      }
-   }
- 
++    if (warnings && !missing.isEmpty())
++    {
++      QString const hint = mobile::Tr("Better with: ", "Besser mit: ") + missingText;
++      secondary += (secondary.isEmpty() ? "" : "  ·  ") + hint;
++      text += "\n" + hint;
++    }
++  }
++
 +  if (m_mobile.showRoute)
 +  {
 +    m_mobile.showRoute(primary, secondary, code != routing::RouterResultCode::NoError, CanFollowRoute());
 +    return;
-+  }
-+
+   }
+ 
 +  if (!m_routeInfo)
 +  {
 +    m_routeInfo = new QLabel(this);
@@ -179,7 +229,7 @@ index 1bb44ea..9eb9e8d 100644
    m_routeInfo->setText(text);
    PlaceRouteInfo();
    m_routeInfo->show();
-@@ -850,10 +883,99 @@ void DrawWidget::ShowRouteInfo(routing::RouterResultCode code)
+@@ -850,10 +922,99 @@ void DrawWidget::ShowRouteInfo(routing::RouterResultCode code)
  
  void DrawWidget::HideRouteInfo()
  {
@@ -279,7 +329,7 @@ index 1bb44ea..9eb9e8d 100644
  void DrawWidget::PlaceRouteInfo()
  {
    if (!m_routeInfo)
-@@ -865,6 +987,25 @@ void DrawWidget::PlaceRouteInfo()
+@@ -865,6 +1026,25 @@ void DrawWidget::PlaceRouteInfo()
    m_routeInfo->move((width() - m_routeInfo->width()) / 2, margin);
  }
  
@@ -306,10 +356,10 @@ index 1bb44ea..9eb9e8d 100644
  {
    TBase::resizeEvent(e);
 diff --git a/qt/draw_widget.hpp b/qt/draw_widget.hpp
-index 1d4c24a..d72b0ba 100644
+index 1d4c24a..6295017 100644
 --- a/qt/draw_widget.hpp
 +++ b/qt/draw_widget.hpp
-@@ -5,9 +5,11 @@
+@@ -5,16 +5,20 @@
  #include "qt/ruler.hpp"
  #include "qt/selection.hpp"
  
@@ -321,7 +371,8 @@ index 1d4c24a..d72b0ba 100644
  
  #include "indexer/map_style.hpp"
  
-@@ -15,6 +17,7 @@
++#include <QtCore/QStringList>
+ #include <QtWidgets/QRubberBand>
  
  class QLabel;
  
@@ -329,7 +380,7 @@ index 1d4c24a..d72b0ba 100644
  #include <memory>
  #include <optional>
  #include <string>
-@@ -71,6 +74,26 @@ public:
+@@ -71,6 +75,26 @@ public:
    void SetMapStyleToDefault();
    void SetMapStyleToVehicle();
  
@@ -356,7 +407,7 @@ index 1d4c24a..d72b0ba 100644
  protected:
    /// @name Overriden from MapWidget.
    //@{
-@@ -88,6 +111,7 @@ protected:
+@@ -88,13 +112,15 @@ protected:
    void keyPressEvent(QKeyEvent * e) override;
    void keyReleaseEvent(QKeyEvent * e) override;
    void resizeEvent(QResizeEvent * e) override;
@@ -364,7 +415,8 @@ index 1d4c24a..d72b0ba 100644
  
  private:
    // Ubuntu Touch: route summary (distance, time, ascent) shown over the map.
-@@ -95,6 +119,7 @@ private:
+-  void ShowRouteInfo(routing::RouterResultCode code);
++  void ShowRouteInfo(routing::RouterResultCode code, QStringList const & missing = {});
    void HideRouteInfo();
    void PlaceRouteInfo();
    QLabel * m_routeInfo = nullptr;
