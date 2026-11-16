@@ -22,8 +22,8 @@ offizielles Produkt des CoMaps-Projekts und steht in keiner Verbindung zu ihm.
   <img src="docs/screenshots/downloader.jpg" alt="Karten herunterladen" width="180">
 </p>
 
-> **Status:** läuft auf Ubuntu Touch **24.04 (Noble)** und **26.04** (getestet auf einem
-> Poco X3 Pro). Ältere Versionen (16.04/20.04) reichen für CoMaps nicht aus, siehe unten.
+> **Status:** läuft auf Ubuntu Touch **26.04** (getestet auf einem Poco X3 Pro) und nutzt das
+> Qt 6.10 des Systems. Ältere Versionen reichen nicht aus, siehe unten.
 
 ## Schnellstart
 
@@ -35,21 +35,17 @@ offizielles Produkt des CoMaps-Projekts und steht in keiner Verbindung zu ihm.
 
 Details zu `build.sh` und zum lokalen Build unter [Bauen](#bauen).
 
-## Warum Noble (24.04)?
+## Warum Ubuntu Touch 26.04?
 
-CoMaps (Stand: master) verlangt:
+CoMaps (Stand: master) verlangt Qt 6, C++23, CMake ≥ 3.22.1 und FreeType ≥ 2.13.1. Das deckt
+erst Ubuntu 24.04 ab; der **OpenStore** nimmt aber nur Apps an, die das Qt des jeweiligen
+Frameworks nutzen: Qt 5.15 für 24.04 und **Qt 6.10 für 26.04** (geprüft von
+`click-reviewers-tools`). Ein mitgebrachtes Qt 6.4 wird abgelehnt.
 
-| Anforderung | UT 16.04 | UT 20.04 (Focal) | UT 24.04 (Noble) |
-|---|---|---|---|
-| Qt 6.4+ (Desktop-Frontend) | ❌ Qt 5.9 | ❌ Qt 5.12 | ✅ Qt 6.4 |
-| C++23 (`CMAKE_CXX_STANDARD 23`) | ❌ GCC 5.4 | ❌ GCC 9.3 | ✅ GCC 13 |
-| CMake ≥ 3.22.1 | ❌ | ⚠️ nur via Kitware-PPA | ✅ 3.28 |
-| FreeType ≥ 2.13.1 | ❌ | ❌ (2.10) | ✅ 2.13.2 |
-
-Noble ist die erste UT-Basis, die alle offiziellen Abhängigkeiten des
-CoMaps-Desktop-Builds aus dem Ubuntu-Repository deckt (`qt6-base-dev`,
-`qt6-positioning-dev`, `qt6-svg-dev`, …). Die Qt6-Migration von UBports läuft
-parallel dazu (u. a. Morph-Browser mit gebündeltem Qt6).
+Deshalb wird ut-sapmoc in einem Ubuntu-26.04-Container gegen das Qt aus dem UBports-Repository
+gebaut (dieselbe Qt-6.10.2-Version wie auf dem Handy) und nutzt zur Laufzeit das Qt des Systems
+samt dessen Plugins: Wayland, Maliit-Bildschirmtastatur und die Standortquelle „lomiri“.
+Gebündelt werden nur Bibliotheken, die das Handy nicht hat (z. B. Qt6OpenGLWidgets, Pico TTS).
 
 ## Ubuntu-Touch-Anpassungen (patches/)
 
@@ -86,6 +82,15 @@ bildschirmfüllend unter runden, schwebenden Bedienelementen:
 - Vollbild-Dialoge (Karten herunterladen, Lesezeichen, Einstellungen …) bekommen eine Kopfzeile mit
   rundem Zurück-Knopf und Titel; Listen scrollen mit dem Finger
 
+**Routenoptionen:** ⋯ → Routenoptionen zeigt, was vermieden werden soll – mit dem Auto
+Mautstraßen, Autobahnen, Fähren, unbefestigte Straßen; mit Fahrrad bzw. zu Fuß Fähren,
+unbefestigte Wege, Treppen – und führt zu den Sprachansagen. Eine angezeigte Route wird mit den
+neuen Optionen neu berechnet.
+
+**Deutsche Oberfläche:** Bei deutscher Sprache sind auch die übernommenen Desktop-Dialoge
+(Einstellungen, Lesezeichen, OSM-Anmeldung, Ort bearbeiten, Meldungen) übersetzt
+(`qt/ut_translate.cpp`); Qt-eigene Texte kommen aus den mitgelieferten `qtbase_*.qm`.
+
 **Navigation mit Sprachansagen:** Nach „Start“ zeigt die Routenkarte das nächste Manöver
 (Pfeil, Entfernung, Straße) sowie Restzeit, Ankunftszeit und Reststrecke. Die Abbiegehinweise
 erzeugt CoMaps; gesprochen werden sie offline von **Pico TTS** (die Stimmen liegen im Paket unter
@@ -121,28 +126,28 @@ bereits angewendete Patches.
 
 ```
 ut-sapmoc/
-├── clickable.json          # clickable-Konfiguration (custom builder, arm64, Noble-Framework)
-├── Dockerfile.noble-arm64  # Build-Container: ubuntu:24.04 + Qt6 + Toolchain
+├── clickable.json          # clickable-Konfiguration (custom builder, arm64, Framework 26.04)
+├── Dockerfile.resolute-arm64 # Build-Container: ubuntu:26.04 + UBports-Qt 6.10 + Toolchain
 ├── manifest.in.json        # Click-Manifest (Vorlage), App-Name „ut-sapmoc“
 ├── ut-sapmoc.desktop       # Desktop-Entry für den App-Launcher
 ├── ut-sapmoc.apparmor      # AppArmor-Policy (networking, location, …)
 ├── icons/ut-sapmoc.svg     # App-Icon (SVG, 256×256)
-├── launch/ut-sapmoc           # Start-Wrapper: Qt6-Libs, Wayland, Skalierung, Datenpfade
+├── launch/ut-sapmoc        # Start-Wrapper: gebündelte Libs, Skalierung, Datenpfade
 ├── patches/                # Ubuntu-Touch-Anpassungen an CoMaps (Darkmode, Sprache)
 ├── .github/workflows/      # GitHub-Actions-Build (arm64-Runner) + Releases
 └── scripts/
     ├── fetch-source.sh     # CoMaps-Quellen am festen Commit holen (shallow/partial)
     ├── apply-patches.sh    # patches/*.patch anwenden (wiederholbar)
     ├── build-comaps.sh     # Patches + configure.sh + tools/unix/build_omim.sh -r desktop
-    └── package.sh          # Click-Verzeichnis zusammenstellen (Libs, Plugins, Daten)
+    ├── package.sh          # Click-Verzeichnis zusammenstellen (Libs, Daten, Stimmen)
+    └── ut-26.04-arm64-libs.txt # Bibliotheken eines UT-26.04-Handys (werden nicht gebündelt)
 ```
 
 ## Voraussetzungen
 
 - Linux-Host mit Docker und **clickable ≥ 8** (`pip install clickable-ut`)
 - mind. 30 GB freier Platz, gute Internetverbindung
-- Handy mit Ubuntu Touch **24.04 (Noble)** oder **26.04**: Stable/Focal-Geräte funktionieren
-  **nicht** (Qt 5.12/C++17 reicht für CoMaps nicht aus)
+- Handy mit Ubuntu Touch **26.04** (die App nutzt dessen Qt 6.10)
 - Für GitHub-Builds (`./build.sh ci` / `release`): gespeicherte Git-Zugangsdaten für github.com
   oder `GH_TOKEN`
 - Für den lokalen Build Geduld: Er läuft arm64-emuliert (qemu). Rechne mit mehreren Stunden
@@ -182,9 +187,9 @@ oder wenn du es von Hand machen willst.
 
 ### 1) Docker-Image für clickable bauen (einmalig)
 
-clickable baut nicht in seinem Standard-Image (das basiert auf 20.04), sondern in einem eigenen
-Noble-Image mit Qt6 und der CoMaps-Toolchain. `clickable.json` verweist per
-`"docker_image": "ut-sapmoc:noble-arm64"` darauf, das Image muss also unter genau diesem Namen
+clickable baut nicht in seinem Standard-Image, sondern in einem eigenen
+Ubuntu-26.04-Image mit dem UBports-Qt 6.10 und der CoMaps-Toolchain. `clickable.json` verweist per
+`"docker_image": "ut-sapmoc:resolute-arm64"` darauf, das Image muss also unter genau diesem Namen
 lokal vorhanden sein, bevor du `clickable` aufrufst.
 
 Auf einem amd64-Rechner läuft der arm64-Container per qemu. Einmalig einrichten:
@@ -192,18 +197,18 @@ Auf einem amd64-Rechner läuft der arm64-Container per qemu. Einmalig einrichten
 ```bash
 sudo apt install qemu-user-static binfmt-support
 # Test: muss "aarch64" ausgeben
-docker run --rm --platform linux/arm64 ubuntu:24.04 uname -m
+docker run --rm --platform linux/arm64 ubuntu:26.04 uname -m
 ```
 
 Dann das Image bauen:
 
 ```bash
 cd ut-sapmoc
-docker build --platform linux/arm64 -t ut-sapmoc:noble-arm64 -f Dockerfile.noble-arm64 .
-docker images ut-sapmoc   # Kontrolle: Tag noble-arm64 vorhanden
+docker build --platform linux/arm64 -t ut-sapmoc:resolute-arm64 -f Dockerfile.resolute-arm64 .
+docker images ut-sapmoc   # Kontrolle: Tag resolute-arm64 vorhanden
 ```
 
-Neu bauen musst du das Image nur, wenn sich `Dockerfile.noble-arm64` ändert
+Neu bauen musst du das Image nur, wenn sich `Dockerfile.resolute-arm64` ändert
 (`docker build --no-cache …` erzwingt einen frischen Stand der Pakete).
 
 Typische Fehler:
@@ -232,7 +237,7 @@ Eine Shell im Build-Container (zum Debuggen) gibt es mit `clickable script shell
 Ohne clickable geht es auch direkt im Container:
 
 ```bash
-docker run --rm -it --platform linux/arm64 -v "$PWD":/project ut-sapmoc:noble-arm64 \
+docker run --rm -it --platform linux/arm64 -v "$PWD":/project ut-sapmoc:resolute-arm64 \
     scripts/build-comaps.sh
 ```
 
@@ -262,26 +267,26 @@ Das baut und packt nach `build/*.click`.
   `~/.local/share/ut-sapmoc/` (`-data_path`), dem einzigen beschreibbaren Ort für die App.
 - **Skalierung:** Der Wrapper setzt `QT_SCALE_FACTOR = GRID_UNIT_PX / 8`, damit die
   Qt-Widgets so groß sind wie native Apps.
-- **Bibliotheken:** `package.sh` bündelt Qt6 und dessen Abhängigkeiten, aber bewusst **nicht**
-  libc/libstdc++, EGL/GLES/GL, Wayland, DRM, D-Bus und systemd. Die müssen vom Handy kommen,
-  sonst bricht das GPU-Rendering über libhybris.
+- **Bibliotheken:** `package.sh` bündelt nur, was auf einem UT-26.04-Handy fehlt
+  (`scripts/ut-26.04-arm64-libs.txt`, neu erzeugen mit dem dort angegebenen adb-Befehl).
+  Qt, GPU-Treiber (libhybris), Wayland, PulseAudio usw. kommen vom Handy.
 
 ## Bekannte Punkte
 
-- **Framework:** gesetzt ist `ubuntu-touch-24.04-1.x` (läuft auch auf 26.04). Kontrolle auf dem
-  Gerät mit `click framework list`, anpassen über `COMAPS_FRAMEWORK`.
-- **Neuere Images (26.04):** Der Launcher vergrößert die statische TLS-Reserve von glibc
-  (sonst lädt libhybris den Android-Linker nicht). OpenSSL wird nicht gebündelt: Qt nutzt das
-  OpenSSL 3.x des Handys, das auch dessen eigene Bibliotheken (z. B. für den Standortdienst) brauchen.
+- **Framework:** `ubuntu-touch-26.04-1.x`, AppArmor-Policy 2604.1. Kontrolle auf dem Gerät mit
+  `click framework list`.
+- **OpenStore-Prüfung:** Kategorien in `ut-sapmoc.desktop` nur aus der freedesktop-Liste
+  (`Utility;Maps;`), `data/test_data` wird nicht mitgepackt (Dateinamen mit Sonderzeichen).
+- **TLS-Reserve:** Der Launcher vergrößert die statische TLS-Reserve von glibc
+  (sonst lädt libhybris den Android-Linker nicht).
 - **Bildschirmtastatur:** Der Launcher übergibt dem Maliit-Plugin die Serveradresse direkt
   (`MALIIT_SERVER_ADDRESS`); die Abfrage per D-Bus erreicht das Plugin unter Qt 6 nicht.
 - **Display:** Solange die App im Vordergrund ist, wird der Bildschirm nicht gedimmt oder gesperrt.
 - **Größe des Clicks:** `data/` wird komplett kopiert. Mit
   `COMAPS_DATA_EXCLUDE="ordner1:ordner2" ./build.sh` lässt du Unnötiges weg.
-- **Standort/GPS:** Ubuntu Touch liefert Positionen nur über lomiri-location-service. Dessen
-  Qt-Plugin (`libqtposition_lomiri`) wird mit `scripts/build-lomiri-position.sh` gegen die gebündelte
-  Qt gebaut (Header aus dem UBports-Repository); beim ersten Standortzugriff fragt Ubuntu Touch nach
-  der Berechtigung. Die Bibliotheken des Dienstes kommen vom Handy.
+- **Standort/GPS:** Ubuntu Touch liefert Positionen über lomiri-location-service; das Qt-Plugin
+  `libqtposition_lomiri` des Systems wird genutzt. Beim ersten Standortzugriff fragt Ubuntu Touch
+  nach der Berechtigung.
 - **Icons:** `icons/ut-sapmoc.svg` ist das App-Icon (eigener Entwurf), `icons/ut-sapmoc-v1.svg` ein früherer.
 
 ## Lizenz / Attribution
