@@ -22,7 +22,7 @@ concurrency:
 env:
   # Version für Builds ohne Tag (mit Tag v1.2.3 wird es 1.2.3).
   BASE_VERSION: "0.1.0"
-  IMAGE: ut-sapmoc:noble-arm64
+  IMAGE: ut-sapmoc:resolute-arm64
   # GitHub-Spiegel von Codeberg, aus den Runnern meist schneller erreichbar.
   COMAPS_GIT_URL: https://github.com/comaps/comaps.git
 
@@ -59,19 +59,19 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Click-Version: $VERSION"
 
-      # Dasselbe Image wie lokal für clickable (Dockerfile.noble-arm64), hier nativ gebaut.
+      # Dasselbe Image wie lokal für clickable (Dockerfile.resolute-arm64), hier nativ gebaut.
       - name: Build Docker image
-        run: docker build -t "$IMAGE" -f Dockerfile.noble-arm64 .
+        run: docker build -t "$IMAGE" -f Dockerfile.resolute-arm64 .
 
       # Compiler-Cache zwischen den Läufen: ein zweiter Build ist deutlich schneller.
       - name: Restore ccache
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: ccache-noble-arm64-${{ hashFiles('scripts/fetch-source.sh', 'patches/*.patch') }}-${{ github.run_id }}
+          key: ccache-resolute-arm64-${{ hashFiles('scripts/fetch-source.sh', 'patches/*.patch') }}-${{ github.run_id }}
           restore-keys: |
-            ccache-noble-arm64-${{ hashFiles('scripts/fetch-source.sh', 'patches/*.patch') }}-
-            ccache-noble-arm64-
+            ccache-resolute-arm64-${{ hashFiles('scripts/fetch-source.sh', 'patches/*.patch') }}-
+            ccache-resolute-arm64-
 
       # Wie lokal: fetch-source.sh holt CoMaps am gepinnten Commit, build-comaps.sh
       # wendet patches/ an, baut das Desktop-Frontend und packt nach build/*.click.
@@ -118,8 +118,8 @@ jobs:
           fi
           CLICK="${{ steps.click.outputs.file }}"
           cat > notes.md <<NOTES
-          ut-sapmoc ${{ steps.version.outputs.version }} (basiert auf CoMaps) für Ubuntu Touch **24.04 (Noble), arm64**, gebaut von Commit ${GITHUB_SHA::7}.
-          Läuft nicht auf 20.04/Focal (CoMaps braucht Qt6 und C++23).
+          ut-sapmoc ${{ steps.version.outputs.version }} (basiert auf CoMaps) für Ubuntu Touch **26.04 (Resolute), arm64**, gebaut von Commit ${GITHUB_SHA::7}.
+          Nutzt das Qt 6.10 des Systems; läuft nicht auf 20.04/24.04.
 
           **Installieren** (Telefon per USB, Entwicklermodus an):
           \`\`\`bash

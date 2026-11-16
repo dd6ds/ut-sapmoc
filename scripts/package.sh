@@ -13,7 +13,7 @@ STANDALONE=0
 [ -z "${1:-}" ] && STANDALONE=1
 VERSION="${COMAPS_VERSION:-0.1.0}"
 ARCH="${CLICK_ARCH:-arm64}"
-FRAMEWORK="${COMAPS_FRAMEWORK:-ubuntu-touch-24.04-1.x}"
+FRAMEWORK="${COMAPS_FRAMEWORK:-ubuntu-touch-26.04-1.x}"
 
 echo "[ut-sapmoc] Assembling click directory in $CLICK_DIR ..."
 rm -rf "$CLICK_DIR"
@@ -32,8 +32,9 @@ install -D -m 755 "$(command -v mkdir)" "$CLICK_DIR/bin/mkdir"
 install -m 755 "$BIN" "$CLICK_DIR/ut-sapmoc.bin"
 
 # --- App resources (drules, fonts, symbols, classificator, World.mwm, ...) ---
-# Trim folders you do not need, e.g. COMAPS_DATA_EXCLUDE="test_data:vulkan_shaders".
-EXCLUDES="${COMAPS_DATA_EXCLUDE:-}"
+# Trim folders the app does not need. test_data only serves CoMaps' unit tests
+# (its file names with non-ASCII characters also fail the OpenStore review).
+EXCLUDES="${COMAPS_DATA_EXCLUDE:-test_data}"
 echo "[ut-sapmoc] Copying app data from $SRC/data ..."
 rsync -a --delete \
     $(for e in ${EXCLUDES//:/ }; do echo "--exclude=$e"; done) \
@@ -66,54 +67,22 @@ else
     echo "[ut-sapmoc] WARNING: no Qt translations in $QT_TR." >&2
 fi
 
-# --- Qt plugins --------------------------------------------------------------
-PLUGINS=""
-for d in /usr/lib/aarch64-linux-gnu/qt6/plugins /usr/lib/qt6/plugins; do
-    [ -d "$d" ] && PLUGINS="$d" && break
-done
-if [ -z "$PLUGINS" ]; then
-    echo "[ut-sapmoc] ERROR: Qt6 plugin directory not found." >&2
-    exit 1
-fi
-mkdir -p "$CLICK_DIR/lib/plugins"
-for p in platforms platforminputcontexts imageformats iconengines \
-         wayland-shell-integration wayland-graphics-integration-client \
-         wayland-decoration-client position tls networkinformation; do
-    [ -d "$PLUGINS/$p" ] && cp -a "$PLUGINS/$p" "$CLICK_DIR/lib/plugins/"
-done
-# Maliit input context (QT_IM_MODULE=maliit on Lomiri) -> on-screen keyboard.
-# Built into the Docker image by scripts/build-maliit-qt6.sh.
-MALIIT_PLUGIN="${MALIIT_QT6_PLUGIN:-/opt/maliit-qt6/libmaliitplatforminputcontextplugin.so}"
-if [ -f "$MALIIT_PLUGIN" ]; then
-    mkdir -p "$CLICK_DIR/lib/plugins/platforminputcontexts"
-    install -m 644 "$MALIIT_PLUGIN" "$CLICK_DIR/lib/plugins/platforminputcontexts/"
-else
-    echo "[ut-sapmoc] ERROR: $MALIIT_PLUGIN missing - no on-screen keyboard." >&2
-    echo "            Rebuild the Docker image (Dockerfile.noble-arm64)." >&2
-    exit 1
-fi
-
-# --- Runtime libraries (Qt6 and its deps) ------------------------------------
-# Bundles every shared library the binary and the plugins need, except those
-# the phone must provide itself: the C runtime and everything that talks to
-# the GPU and the compositor (libhybris EGL/GLES, Wayland, DRM). Copies of those
-# from the container would break rendering or the session.
+# --- Runtime libraries ----------------------------------------------------------
+# The app uses the phone's Qt 6.10 and its plugins (Wayland, Maliit keyboard,
+# lomiri position source): the OpenStore only accepts the Qt of the Ubuntu Touch
+# framework. Bundled are only the libraries the phone lacks, judged by the list
+# of libraries on a UT 26.04 phone (scripts/ut-26.04-arm64-libs.txt; refresh with
+#   adb shell "ls -1 /usr/lib/aarch64-linux-gnu /lib/aarch64-linux-gnu /usr/lib | grep '\.so' | sort -u").
+SYSTEM_LIBS="${UT_SYSTEM_LIBS:-scripts/ut-26.04-arm64-libs.txt}"
+declare -A ON_PHONE=()
+while read -r l; do [ -n "$l" ] && ON_PHONE[$l]=1; done < "$SYSTEM_LIBS"
 is_system_lib() {
-    case "$(basename "$1")" in
-        ld-linux*|libc.so*|libm.so*|libdl.so*|librt.so*|libpthread.so*|libresolv.so*|\
-        libstdc++.so*|libgcc_s.so*|\
-        libEGL*|libGL*|libGLES*|libGLX*|libGLdispatch*|libOpenGL*|libgbm*|libdrm*|\
-        libwayland-*|libhybris*|libandroid*|\
-        libdbus-1.so*|libsystemd.so*|libudev.so*|\
-        libssl.so*|libcrypto.so*|libpulse*)
-            # PulseAudio: the phone's, it must match the phone's sound server.
-            # OpenSSL: the phone's. Qt's TLS backend works with any OpenSSL 3.x,
-            # and the phone's own libraries (e.g. libcurl used by
-            # lomiri-location-service) need the phone's newer one; a bundled
-            # copy would shadow it (UT 26.04: OpenSSL 3.5).
-            return 0 ;;
+    local name
+    name="$(basename "$1")"
+    case "$name" in
+        ld-linux*|libc.so*|libm.so*|libdl.so*|librt.so*|libpthread.so*) return 0 ;;
     esac
-    return 1
+    [ -n "${ON_PHONE[$name]:-}" ]
 }
 declare -A SEEN=()
 copy_libs() {
@@ -122,27 +91,13 @@ copy_libs() {
         [ -n "${SEEN[$lib]:-}" ] && continue
         SEEN[$lib]=1
         is_system_lib "$lib" && continue
+        echo "[ut-sapmoc]   bundling $(basename "$lib")"
         cp -Ln "$lib" "$CLICK_DIR/lib/"
         copy_libs "$lib"
     done
 }
-echo "[ut-sapmoc] Bundling shared libraries ..."
-mapfile -t PLUGIN_SOS < <(find "$CLICK_DIR/lib/plugins" -name '*.so')
-copy_libs "$CLICK_DIR/ut-sapmoc.bin" "${PLUGIN_SOS[@]}"
-# Positions on Ubuntu Touch come only from lomiri-location-service. Its Qt
-# plugin is built against our Qt (build-lomiri-position.sh) and added after the
-# library bundling on purpose: liblomiri-location-service and dbus-cpp must be
-# the phone's own (they talk to the phone's service). Geoclue does not exist
-# on Ubuntu Touch, so its plugin and the polling fallback are dropped.
-LOMIRI_PLUGIN="${LOMIRI_POSITION_PLUGIN:-build/lomiri-position/out/libqtposition_lomiri.so}"
-if [ -f "$LOMIRI_PLUGIN" ]; then
-    mkdir -p "$CLICK_DIR/lib/plugins/position"
-    install -m 644 "$LOMIRI_PLUGIN" "$CLICK_DIR/lib/plugins/position/"
-    rm -f "$CLICK_DIR/lib/plugins/position/libqtposition_geoclue2.so" \
-          "$CLICK_DIR/lib/plugins/position/libqtposition_positionpoll.so"
-else
-    echo "[ut-sapmoc] WARNING: $LOMIRI_PLUGIN missing - no GPS on the phone." >&2
-fi
+echo "[ut-sapmoc] Bundling shared libraries the phone lacks ..."
+copy_libs "$CLICK_DIR/ut-sapmoc.bin"
 echo "[ut-sapmoc] Bundled $(ls "$CLICK_DIR/lib" | grep -c '\.so') libraries."
 
 # --- Build the click (clickable does this itself) -----------------------------

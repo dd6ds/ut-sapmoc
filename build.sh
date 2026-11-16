@@ -18,13 +18,13 @@
 #
 # Only Docker is needed on the computer: Clickable itself runs in a container
 # (the same "clickable-runner" image as the other projects) and starts the
-# arm64 build container ut-sapmoc:noble-arm64 through the computer's Docker.
+# arm64 build container ut-sapmoc:resolute-arm64 through the computer's Docker.
 
 set -euo pipefail
 
 CLICKABLE_VERSION="8.10.0"
 IMAGE="clickable-runner:${CLICKABLE_VERSION}"
-BUILD_IMAGE="ut-sapmoc:noble-arm64"
+BUILD_IMAGE="ut-sapmoc:resolute-arm64"
 REPO="dd6ds/ut-sapmoc"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="$PROJECT_DIR/build"
@@ -60,16 +60,16 @@ RUN pip install --no-cache-dir "clickable-ut==${CLICKABLE_VERSION}"
 DOCKERFILE
 }
 
-# The noble/arm64 toolchain image clickable.json asks for. On amd64 it needs qemu.
+# The resolute/arm64 toolchain image clickable.json asks for. On amd64 it needs qemu.
 build_toolchain_image() {
     docker image inspect "$BUILD_IMAGE" >/dev/null 2>&1 && return
     if [[ "$(uname -m)" != "aarch64" ]]; then
-        docker run --rm --platform linux/arm64 ubuntu:24.04 uname -m >/dev/null 2>&1 \
+        docker run --rm --platform linux/arm64 ubuntu:26.04 uname -m >/dev/null 2>&1 \
             || die "arm64 containers do not run here. Install qemu:" \
                    "sudo apt install qemu-user-static binfmt-support"
     fi
     echo "build.sh: building $BUILD_IMAGE (once, takes a while)"
-    docker build --platform linux/arm64 -t "$BUILD_IMAGE" -f "$PROJECT_DIR/Dockerfile.noble-arm64" "$PROJECT_DIR"
+    docker build --platform linux/arm64 -t "$BUILD_IMAGE" -f "$PROJECT_DIR/Dockerfile.resolute-arm64" "$PROJECT_DIR"
 }
 
 # Clickable mounts host paths into its build containers under the same path,
@@ -220,7 +220,7 @@ ensure_release() {
     local upload
     upload="$(curl -fsS -X POST -H "Authorization: Bearer $token" -H "Accept: application/vnd.github+json" \
         "https://api.github.com/repos/$REPO/releases" \
-        -d "{\"tag_name\":\"$tag\",\"name\":\"ut-sapmoc $tag\",\"body\":\"CoMaps für Ubuntu Touch (arm64, Noble/24.04 und neuer). Kartendaten © OpenStreetMap-Mitwirkende (ODbL), CoMaps Apache-2.0.\"}" \
+        -d "{\"tag_name\":\"$tag\",\"name\":\"ut-sapmoc $tag\",\"body\":\"CoMaps für Ubuntu Touch (arm64, Ubuntu Touch 26.04). Kartendaten © OpenStreetMap-Mitwirkende (ODbL), CoMaps Apache-2.0.\"}" \
         | python3 -c 'import json,sys; print(json.load(sys.stdin)["upload_url"].split("{")[0])')" \
         || { echo "build.sh: could not create the release (the click is in build/ anyway)" >&2; return; }
     curl -fsS -X POST -H "Authorization: Bearer $token" -H "Content-Type: application/octet-stream" \

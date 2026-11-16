@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build CoMaps (desktop target) inside the noble/arm64 container.
+# Build CoMaps (desktop target) inside the resolute/arm64 container (UT 26.04).
 # Runs via: clickable build  (which passes the install dir as $1)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -56,10 +56,6 @@ if [ -z "$BIN" ]; then
 fi
 echo "[ut-sapmoc] Built binary: $BIN"
 
-# 3b) Qt position plugin for lomiri-location-service (GPS on Ubuntu Touch).
-scripts/build-lomiri-position.sh build/lomiri-position/out
-
 # 4) Assemble the click (into clickable's install dir if given).
 export COMAPS_BIN="$BIN"
-export LOMIRI_POSITION_PLUGIN="$ROOT/build/lomiri-position/out/libqtposition_lomiri.so"
 scripts/package.sh "$INSTALL"

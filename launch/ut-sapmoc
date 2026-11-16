@@ -1,7 +1,7 @@
 #!/bin/bash
 # CoMaps launcher for Ubuntu Touch.
-# Sets up the bundled Qt6 libraries, the Wayland platform plugin, the UI scale
-# and the read-only/writable data paths, then execs the real binary.
+# Uses the phone's Qt 6 (plus the few bundled libraries in lib/), sets the UI
+# scale and the read-only/writable data paths, then execs the real binary.
 set -e
 
 # NOTE: Under the UT 24.04 AppArmor profile (policy 2404.x) a confined app may
@@ -11,7 +11,6 @@ HERE="${BASH_SOURCE[0]%/*}"
 [ "$HERE" = "${BASH_SOURCE[0]}" ] && HERE="$PWD"
 
 export LD_LIBRARY_PATH="$HERE/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export QT_PLUGIN_PATH="$HERE/lib/plugins"
 export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
 # Lomiri draws the window frame; Qt must not add its own decorations.
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
@@ -19,8 +18,8 @@ export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 # glibc's static TLS reserve is too small ("cannot allocate memory in static
 # TLS block", seen on UT 26.04 images). Enlarge it; harmless elsewhere.
 export GLIBC_TUNABLES="${GLIBC_TUNABLES:+$GLIBC_TUNABLES:}glibc.rtld.optional_static_tls=4096000"
-# On-screen keyboard: the bundled Maliit plugin asks D-Bus for the server
-# address, but under Qt 6 that reply never reaches it ("cannot deliver a reply
+# On-screen keyboard: the Maliit plugin asks D-Bus for the server
+# address, but under Qt 6 that reply may never reach it ("cannot deliver a reply
 # to ...DynamicAddress::successCallback") - no keyboard. Maliit takes a fixed
 # address from the environment instead; the server socket has a known place.
 if [ -z "${MALIIT_SERVER_ADDRESS:-}" ] && [ -S "${XDG_RUNTIME_DIR:-/nonexistent}/maliit-server" ]; then

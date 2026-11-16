@@ -1,5 +1,5 @@
 {
-    "policy_version": 2404.1,
+    "policy_version": 2604.1,
     "policy_groups": [
         "networking",
         "location",

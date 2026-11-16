@@ -5,6 +5,6 @@ Exec=ut-sapmoc
 Icon=ut-sapmoc.svg
 Terminal=false
 Type=Application
-Categories=Navigation;Utility;Maps;
+Categories=Utility;Maps;
 Keywords=maps;navigation;osm;offline;
 X-Lomiri-Touch=true
